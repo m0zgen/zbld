@@ -2,5 +2,5 @@
 .DS_Store
 .vscode
 dist
-
+zdns.log
 tools/builds/prev
