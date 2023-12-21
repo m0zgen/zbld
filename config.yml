@@ -1,0 +1,7 @@
+upstream_dns_servers:
+  - "1.1.1.1:53"
+  - "8.8.8.8:53"
+hosts_file: "hosts.txt"
+default_ip_address: "0.0.0.0"
+dns_port: 5001
+enable_logging: true
