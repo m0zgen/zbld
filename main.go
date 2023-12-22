@@ -15,6 +15,7 @@ import (
 	"strings"
 	"sync"
 	"syscall"
+	"time"
 )
 
 // Config структура для хранения параметров конфигурации
@@ -24,6 +25,7 @@ type Config struct {
 	DefaultIPAddress   string   `yaml:"default_ip_address"`
 	DNSPort            int      `yaml:"dns_port"`
 	EnableLogging      bool     `yaml:"enable_logging"`
+	BalancingStrategy  string   `yaml:"load_balancing_strategy"`
 }
 
 var config Config
@@ -75,13 +77,51 @@ func loadHosts(filename string) error {
 	return nil
 }
 
-// Round-robin upstream balancing
+func isUpstreamServerAvailable(upstreamAddr string, timeout time.Duration) bool {
+	conn, err := net.DialTimeout("udp", upstreamAddr, timeout)
+	if err != nil {
+		return false
+	}
+	defer conn.Close()
+	return true
+}
+
+// Strict upstream balancing
 func getNextUpstreamServer() string {
+
+	// Проверить доступность первого сервера
+	if isUpstreamServerAvailable(upstreamServers[0], 2*time.Second) {
+		return upstreamServers[0]
+	}
+
+	// Если первый сервер недоступен, вернуть второй
+	return upstreamServers[1]
+}
+
+// Round-robin upstream balancing
+func getRobinUpstreamServer() string {
 	//mu.Lock()
 	//defer mu.Unlock()
 	// Простой round-robin: выбираем следующий сервер
 	currentIndex = (currentIndex + 1) % len(config.UpstreamDNSServers)
 	return upstreamServers[currentIndex]
+}
+
+func getUpstreamServer() string {
+
+	switch config.BalancingStrategy {
+	case "robin":
+		log.Println("Round-robin strategy")
+		return getRobinUpstreamServer()
+	case "strict":
+		log.Println("Strict strategy")
+		return getNextUpstreamServer()
+	default:
+		// Default strategy is robin
+		log.Println("Default strategy (robin)")
+		return getRobinUpstreamServer()
+	}
+
 }
 
 func resolveWithUpstream(host string, clientIP net.IP) net.IP {
@@ -185,6 +225,7 @@ func handleDNSRequest(w dns.ResponseWriter, r *dns.Msg) {
 	m.Authoritative = true
 
 	var clientIP net.IP
+	//var upstreamAd string
 
 	// Check net.IP type
 	if tcpAddr, ok := w.RemoteAddr().(*net.TCPAddr); ok {
@@ -207,7 +248,7 @@ func handleDNSRequest(w dns.ResponseWriter, r *dns.Msg) {
 		mu.Lock()
 
 		//Call round-robin
-		upstreamAd := getNextUpstreamServer()
+		upstreamAd := getUpstreamServer()
 		log.Println("Upstream server:", upstreamAd)
 
 		if hosts[_host] {
