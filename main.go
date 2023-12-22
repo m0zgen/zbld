@@ -73,14 +73,14 @@ func loadHosts(filename string) error {
 	return nil
 }
 
-func resolveWithUpstream(host string) net.IP {
+func resolveWithUpstream(host string, clientIP net.IP) net.IP {
 	client := dns.Client{}
 
 	// Iterate over upstream DNS servers
 	for _, upstreamAddr := range config.UpstreamDNSServers {
 		msg := &dns.Msg{}
 		msg.SetQuestion(dns.Fqdn(host), dns.TypeA)
-		log.Println("Resolving with upstream DNS:", upstreamAddr, host)
+		log.Println("Resolving with upstream DNS for:", upstreamAddr, clientIP, host)
 
 		resp, _, err := client.Exchange(msg, upstreamAddr)
 		if err == nil && len(resp.Answer) > 0 {
@@ -108,8 +108,8 @@ func handleDNSRequest(w dns.ResponseWriter, r *dns.Msg) {
 		mu.Lock()
 		if hosts[_host] {
 			// Resolve using upstream DNS for names not in hosts.txt
-			log.Println("Resolving with upstream DNS for:", clientIP, _host)
-			ip := resolveWithUpstream(host)
+			//log.Println("Resolving with upstream DNS for:", clientIP, _host)
+			ip := resolveWithUpstream(host, clientIP)
 			answer := dns.A{
 				Hdr: dns.RR_Header{
 					Name:   host,
