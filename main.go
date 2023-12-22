@@ -11,6 +11,7 @@ import (
 	"net"
 	"os"
 	"strings"
+	"sync"
 )
 
 // Config структура для хранения параметров конфигурации
@@ -24,6 +25,7 @@ type Config struct {
 
 var config Config
 var hosts map[string]bool
+var mu sync.Mutex
 
 func loadConfig(filename string) error {
 	file, err := ioutil.ReadFile(filename)
@@ -46,13 +48,14 @@ func loadHosts(filename string) error {
 	}
 	defer file.Close()
 
+	mu.Lock()
 	hosts = make(map[string]bool)
-
 	scanner := bufio.NewScanner(file)
 	for scanner.Scan() {
 		host := strings.ToLower(scanner.Text())
 		hosts[host] = true
 	}
+	mu.Unlock()
 
 	if err := scanner.Err(); err != nil {
 		return err
@@ -97,6 +100,7 @@ func handleDNSRequest(w dns.ResponseWriter, r *dns.Msg) {
 		// Убрать точку с конца FQDN
 		_host := strings.TrimRight(host, ".")
 
+		mu.Lock()
 		if hosts[_host] {
 			// Resolve using upstream DNS for names not in hosts.txt
 			fmt.Println("Resolving with upstream DNS for:", _host)
@@ -125,6 +129,7 @@ func handleDNSRequest(w dns.ResponseWriter, r *dns.Msg) {
 			}
 			m.Answer = append(m.Answer, &answer)
 		}
+		mu.Unlock()
 	}
 
 	w.WriteMsg(m)
@@ -141,6 +146,8 @@ func initLogging() {
 
 func main() {
 	var configFile string
+	var wg sync.WaitGroup
+
 	flag.StringVar(&configFile, "config", "config.yml", "Config file path")
 	flag.Parse()
 
@@ -167,13 +174,73 @@ func main() {
 		log.Fatalf("Error loading hosts file: %v", err)
 	}
 
-	server := &dns.Server{Addr: fmt.Sprintf(":%d", config.DNSPort), Net: "udp"}
-	dns.HandleFunc(".", handleDNSRequest)
+	//server := &dns.Server{Addr: fmt.Sprintf(":%d", config.DNSPort), Net: "udp"}
+	//dns.HandleFunc(".", handleDNSRequest)
+	//
+	//fmt.Println("DNS server is listening on :", config.DNSPort)
+	//err := server.ListenAndServe()
+	//if err != nil {
+	//	fmt.Printf("Error starting DNS server: %s\n", err)
+	//}
 
-	fmt.Println("DNS server is listening on :", config.DNSPort)
-	err := server.ListenAndServe()
-	if err != nil {
-		fmt.Printf("Error starting DNS server: %s\n", err)
-	}
+	// Запуск сервера для обработки DNS-запросов по UDP
+	//go func() {
+	//	udpServer := &dns.Server{Addr: fmt.Sprintf(":%d", config.DNSPort), Net: "udp"}
+	//	dns.HandleFunc(".", handleDNSRequest)
+	//
+	//	log.Printf("DNS server is listening on :%d (UDP)...\n", config.DNSPort)
+	//	err := udpServer.ListenAndServe()
+	//	if err != nil {
+	//		log.Printf("Error starting DNS server (UDP): %s\n", err)
+	//	}
+	//}()
+
+	// Запуск сервера для обработки DNS-запросов по TCP
+	//go func() {
+	//	tcpServer := &dns.Server{Addr: fmt.Sprintf(":%d", config.DNSPort), Net: "tcp"}
+	//	dns.HandleFunc(".", handleDNSRequest)
+	//
+	//	log.Printf("DNS server is listening on :%d (TCP)...\n", config.DNSPort)
+	//	err := tcpServer.ListenAndServe()
+	//	if err != nil {
+	//		log.Printf("Error starting DNS server (TCP): %s\n", err)
+	//	}
+	//}()
+
+	// Ожидание сигнала завершения работы (Ctrl+C, например)
+	//select {}
+
+	// Запуск сервера для обработки DNS-запросов по UDP
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+
+		udpServer := &dns.Server{Addr: fmt.Sprintf(":%d", config.DNSPort), Net: "udp"}
+		dns.HandleFunc(".", handleDNSRequest)
+
+		log.Printf("DNS server is listening on :%d (UDP)...\n", config.DNSPort)
+		err := udpServer.ListenAndServe()
+		if err != nil {
+			log.Printf("Error starting DNS server (UDP): %s\n", err)
+		}
+	}()
+
+	// Запуск сервера для обработки DNS-запросов по TCP
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+
+		tcpServer := &dns.Server{Addr: fmt.Sprintf(":%d", config.DNSPort), Net: "tcp"}
+		dns.HandleFunc(".", handleDNSRequest)
+
+		log.Printf("DNS server is listening on :%d (TCP)...\n", config.DNSPort)
+		err := tcpServer.ListenAndServe()
+		if err != nil {
+			log.Printf("Error starting DNS server (TCP): %s\n", err)
+		}
+	}()
+
+	// Ожидание завершения всех горутин
+	wg.Wait()
 
 }
