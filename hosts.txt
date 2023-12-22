@@ -1,3 +1,6 @@
 google.com
 openbld.net
+ada.openbld.net
 sys-adm.in
+github.com
+egov.kz
