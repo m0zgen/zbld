@@ -94,6 +94,69 @@ func resolveWithUpstream(host string, clientIP net.IP) net.IP {
 	return net.ParseIP(config.DefaultIPAddress)
 }
 
+func resolveBothWithUpstream(host string, clientIP net.IP) (net.IP, net.IP) {
+	client := dns.Client{}
+
+	var ipv4, ipv6 net.IP
+
+	// Iterate over upstream DNS servers
+	for _, upstreamAddr := range config.UpstreamDNSServers {
+		// Resolve IPv4
+		msgIPv4 := &dns.Msg{}
+		msgIPv4.SetQuestion(dns.Fqdn(host), dns.TypeA)
+		log.Println("Resolving with upstream DNS for IPv4:", upstreamAddr, clientIP, host)
+
+		respIPv4, _, err := client.Exchange(msgIPv4, upstreamAddr)
+		if err == nil && len(respIPv4.Answer) > 0 {
+			if a, ok := respIPv4.Answer[0].(*dns.A); ok {
+				ipv4 = a.A
+				break
+			}
+		}
+
+		// Resolve IPv6
+		msgIPv6 := &dns.Msg{}
+		msgIPv6.SetQuestion(dns.Fqdn(host), dns.TypeAAAA)
+		log.Println("Resolving with upstream DNS for IPv6:", upstreamAddr, clientIP, host)
+
+		respIPv6, _, err := client.Exchange(msgIPv6, upstreamAddr)
+		if err == nil && len(respIPv6.Answer) > 0 {
+			if aaaa, ok := respIPv6.Answer[0].(*dns.AAAA); ok {
+				ipv6 = aaaa.AAAA
+				break
+			}
+		}
+	}
+
+	// Check if there is a valid AAAA response
+	if ipv6 != nil && !ipv6.Equal(net.ParseIP("::ffff:0.0.0.0")) {
+		return ipv4, ipv6
+	}
+
+	// Return the default IP addresses if no successful response is obtained
+	if ipv4 == nil {
+		ipv4 = net.ParseIP(config.DefaultIPAddress)
+	}
+	if ipv6 == nil {
+		ipv6 = net.ParseIP(config.DefaultIPAddress)
+	}
+
+	// Вернуть nil для ipv6, если AAAA запись отсутствует
+	if ipv6.Equal(net.ParseIP("::ffff:0.0.0.0")) {
+		ipv6 = nil
+	}
+
+	if ipv4 != nil && !ipv6.Equal(net.ParseIP("::ffff:0.0.0.0")) {
+		// Домен имеет запись A (IPv4), но не имеет записи AAAA (IPv6)
+		log.Printf("Domain %s has A address %s\n", host, ipv4.String())
+	} else {
+		// Домен либо не имеет записи A (IPv4), либо имеет запись AAAA (IPv6)
+		log.Printf("Domain %s does not have AAAA address\n", host)
+	}
+
+	return ipv4, ipv6
+}
+
 func handleDNSRequest(w dns.ResponseWriter, r *dns.Msg) {
 	m := new(dns.Msg)
 	m.SetReply(r)
@@ -109,17 +172,34 @@ func handleDNSRequest(w dns.ResponseWriter, r *dns.Msg) {
 		if hosts[_host] {
 			// Resolve using upstream DNS for names not in hosts.txt
 			//log.Println("Resolving with upstream DNS for:", clientIP, _host)
-			ip := resolveWithUpstream(host, clientIP)
-			answer := dns.A{
+			ipv4, ipv6 := resolveBothWithUpstream(host, clientIP)
+
+			// IPv4
+			answerIPv4 := dns.A{
 				Hdr: dns.RR_Header{
 					Name:   host,
 					Rrtype: dns.TypeA,
 					Class:  dns.ClassINET,
 					Ttl:    0,
 				},
-				A: ip,
+				A: ipv4,
 			}
-			m.Answer = append(m.Answer, &answer)
+			m.Answer = append(m.Answer, &answerIPv4)
+
+			// IPv6
+			if ipv6 != nil {
+				answerIPv6 := dns.AAAA{
+					Hdr: dns.RR_Header{
+						Name:   host,
+						Rrtype: dns.TypeAAAA,
+						Class:  dns.ClassINET,
+						Ttl:    0,
+					},
+					AAAA: ipv6,
+				}
+				m.Answer = append(m.Answer, &answerIPv6)
+			}
+
 		} else {
 			// Return 0.0.0.0 for names in hosts.txt
 			log.Println("Zero response for:", clientIP, host)
