@@ -183,10 +183,23 @@ func handleDNSRequest(w dns.ResponseWriter, r *dns.Msg) {
 	m := new(dns.Msg)
 	m.SetReply(r)
 	m.Authoritative = true
-	clientIP := w.RemoteAddr().(*net.TCPAddr).IP
+
+	var clientIP net.IP
+
+	// Check net.IP type
+	if tcpAddr, ok := w.RemoteAddr().(*net.TCPAddr); ok {
+		log.Println("TCP")
+		clientIP = tcpAddr.IP
+	} else if udpAddr, ok := w.RemoteAddr().(*net.UDPAddr); ok {
+		log.Println("UDP")
+		clientIP = udpAddr.IP
+	} else {
+		log.Println("Unknown network type")
+		clientIP = nil
+	}
 
 	for _, question := range r.Question {
-
+		log.Printf("Received query for %s type %s\n", question.Name, dns.TypeToString[question.Qtype])
 		host := question.Name
 		// Убрать точку с конца FQDN
 		_host := strings.TrimRight(host, ".")
