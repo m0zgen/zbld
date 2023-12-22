@@ -29,6 +29,8 @@ type Config struct {
 var config Config
 var hosts map[string]bool
 var mu sync.Mutex
+var currentIndex = 0
+var upstreamServers []string
 
 func loadConfig(filename string) error {
 	file, err := ioutil.ReadFile(filename)
@@ -73,6 +75,15 @@ func loadHosts(filename string) error {
 	return nil
 }
 
+// Round-robin upstream balancing
+func getNextUpstreamServer() string {
+	//mu.Lock()
+	//defer mu.Unlock()
+	// Простой round-robin: выбираем следующий сервер
+	currentIndex = (currentIndex + 1) % len(config.UpstreamDNSServers)
+	return upstreamServers[currentIndex]
+}
+
 func resolveWithUpstream(host string, clientIP net.IP) net.IP {
 	client := dns.Client{}
 
@@ -94,34 +105,33 @@ func resolveWithUpstream(host string, clientIP net.IP) net.IP {
 	return net.ParseIP(config.DefaultIPAddress)
 }
 
-func resolveBothWithUpstream(host string, clientIP net.IP) (net.IP, net.IP) {
+func resolveBothWithUpstream(host string, clientIP net.IP, upstreamAddr string) (net.IP, net.IP) {
 	client := dns.Client{}
-
 	var ipv4, ipv6 net.IP
 
 	// Iterate over upstream DNS servers
 	// TODO: Add primary adn secondary upstream DNS servers or select random one from list
-	for _, upstreamAddr := range config.UpstreamDNSServers {
-		// Resolve IPv4
-		msgIPv4 := &dns.Msg{}
-		msgIPv4.SetQuestion(dns.Fqdn(host), dns.TypeA)
-		log.Println("Resolving with upstream DNS for IPv4:", upstreamAddr, clientIP, host)
+	//for _, upstreamAddr := range config.UpstreamDNSServers {
+	// Resolve IPv4
+	msgIPv4 := &dns.Msg{}
+	msgIPv4.SetQuestion(dns.Fqdn(host), dns.TypeA)
+	log.Println("Resolving with upstream DNS for IPv4:", upstreamAddr, clientIP, host)
 
-		respIPv4, _, err := client.Exchange(msgIPv4, upstreamAddr)
-		if err == nil && len(respIPv4.Answer) > 0 {
+	respIPv4, _, err := client.Exchange(msgIPv4, upstreamAddr)
+	if err == nil && len(respIPv4.Answer) > 0 {
 
-			//if a, ok := respIPv4.Answer[0].(*dns.A); ok {
-			//	ipv4 = a.A
-			//	//break
-			//}
-			for _, answer := range respIPv4.Answer {
-				if a, ok := answer.(*dns.A); ok {
-					ipv4 = a.A
-					log.Printf("IPv4 address: %s\n", ipv4)
-				}
+		//if a, ok := respIPv4.Answer[0].(*dns.A); ok {
+		//	ipv4 = a.A
+		//	//break
+		//}
+		for _, answer := range respIPv4.Answer {
+			if a, ok := answer.(*dns.A); ok {
+				ipv4 = a.A
+				log.Printf("IPv4 address: %s\n", ipv4)
 			}
-
 		}
+
+		//}
 
 		// Resolve IPv6
 		msgIPv6 := &dns.Msg{}
@@ -173,46 +183,55 @@ func handleDNSRequest(w dns.ResponseWriter, r *dns.Msg) {
 	m := new(dns.Msg)
 	m.SetReply(r)
 	m.Authoritative = true
-	clientIP := w.RemoteAddr().(*net.UDPAddr).IP
+	clientIP := w.RemoteAddr().(*net.TCPAddr).IP
 
 	for _, question := range r.Question {
+
 		host := question.Name
 		// Убрать точку с конца FQDN
 		_host := strings.TrimRight(host, ".")
 
 		mu.Lock()
+
+		//Call round-robin
+		upstreamAd := getNextUpstreamServer()
+		log.Println("Upstream server:", upstreamAd)
+
 		if hosts[_host] {
 			// Resolve using upstream DNS for names not in hosts.txt
 			//log.Println("Resolving with upstream DNS for:", clientIP, _host)
-			ipv4, ipv6 := resolveBothWithUpstream(host, clientIP)
+			ipv4, ipv6 := resolveBothWithUpstream(host, clientIP, upstreamAd)
 
 			// IPv4
-			answerIPv4 := dns.A{
-				Hdr: dns.RR_Header{
-					Name:   host,
-					Rrtype: dns.TypeA,
-					Class:  dns.ClassINET,
-					Ttl:    0,
-				},
-				A: ipv4,
-			}
-			m.Answer = append(m.Answer, &answerIPv4)
-			log.Println("Answer v4:", answerIPv4)
-
-			// IPv6
-			if ipv6 != nil {
-				answerIPv6 := dns.AAAA{
+			if question.Qtype == dns.TypeA {
+				answerIPv4 := dns.A{
 					Hdr: dns.RR_Header{
 						Name:   host,
-						Rrtype: dns.TypeAAAA,
+						Rrtype: dns.TypeA,
 						Class:  dns.ClassINET,
 						Ttl:    0,
 					},
-					AAAA: ipv6,
+					A: ipv4,
 				}
-				m.Answer = append(m.Answer, &answerIPv6)
-				log.Println("Answer v6:", answerIPv6)
+				m.Answer = append(m.Answer, &answerIPv4)
+				log.Println("Answer v4:", answerIPv4)
+			}
 
+			// IPv6
+			if question.Qtype == dns.TypeAAAA {
+				if ipv6 != nil {
+					answerIPv6 := dns.AAAA{
+						Hdr: dns.RR_Header{
+							Name:   host,
+							Rrtype: dns.TypeAAAA,
+							Class:  dns.ClassINET,
+							Ttl:    0,
+						},
+						AAAA: ipv6,
+					}
+					m.Answer = append(m.Answer, &answerIPv6)
+					log.Println("Answer v6:", answerIPv6)
+				}
 			}
 
 		} else {
@@ -270,6 +289,8 @@ func main() {
 	if err := loadConfig(configFile); err != nil {
 		log.Fatalf("Error loading config file: %v", err)
 	}
+
+	upstreamServers = config.UpstreamDNSServers
 
 	initLogging()
 
