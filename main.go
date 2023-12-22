@@ -110,9 +110,15 @@ func resolveBothWithUpstream(host string, clientIP net.IP) (net.IP, net.IP) {
 		respIPv4, _, err := client.Exchange(msgIPv4, upstreamAddr)
 		if err == nil && len(respIPv4.Answer) > 0 {
 
-			if a, ok := respIPv4.Answer[0].(*dns.A); ok {
-				ipv4 = a.A
-				//break
+			//if a, ok := respIPv4.Answer[0].(*dns.A); ok {
+			//	ipv4 = a.A
+			//	//break
+			//}
+			for _, answer := range respIPv4.Answer {
+				if a, ok := answer.(*dns.A); ok {
+					ipv4 = a.A
+					log.Printf("IPv4 address: %s\n", ipv4)
+				}
 			}
 
 		}
@@ -126,25 +132,26 @@ func resolveBothWithUpstream(host string, clientIP net.IP) (net.IP, net.IP) {
 		respIPv6, _, err := client.Exchange(msgIPv6, upstreamAddr)
 
 		if err == nil && len(respIPv6.Answer) > 0 {
-			if aaaa, ok := respIPv6.Answer[0].(*dns.AAAA); ok {
-				ipv6 = aaaa.AAAA
-				//break
+			//if aaaa, ok := respIPv6.Answer[0].(*dns.AAAA); ok {
+			//	ipv6 = aaaa.AAAA
+			//	//break
+			//}
+			for _, answer := range respIPv6.Answer {
+				if aaaa, ok := answer.(*dns.AAAA); ok {
+					ipv6 = aaaa.AAAA
+					log.Printf("IPv6 address: %s\n", ipv6)
+				}
 			}
 		}
 	}
 
-	// Check if there is a valid AAAA response
-	if ipv6 != nil && !ipv6.Equal(net.ParseIP("::ffff:0.0.0.0")) {
-		return ipv4, ipv6
-	}
-
 	// Return the default IP addresses if no successful response is obtained
-	if ipv4 == nil {
-		ipv4 = net.ParseIP(config.DefaultIPAddress)
-	}
-	if ipv6 == nil {
-		ipv6 = net.ParseIP(config.DefaultIPAddress)
-	}
+	//if ipv4 == nil {
+	//	ipv4 = net.ParseIP(config.DefaultIPAddress)
+	//}
+	//if ipv6 == nil {
+	//	ipv6 = net.ParseIP(config.DefaultIPAddress)
+	//}
 
 	// Вернуть nil для ipv6, если AAAA запись отсутствует
 	if ipv6.Equal(net.ParseIP("::ffff:0.0.0.0")) {
@@ -156,7 +163,7 @@ func resolveBothWithUpstream(host string, clientIP net.IP) (net.IP, net.IP) {
 		log.Printf("Domain %s has A address %s\n", host, ipv4.String())
 	} else {
 		// Домен либо не имеет записи A (IPv4), либо имеет запись AAAA (IPv6)
-		log.Printf("Domain %s does not have AAAA address\n", host)
+		log.Printf("Domain %s does not have A address\n", host)
 	}
 
 	return ipv4, ipv6
