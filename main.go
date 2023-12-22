@@ -100,6 +100,7 @@ func resolveBothWithUpstream(host string, clientIP net.IP) (net.IP, net.IP) {
 	var ipv4, ipv6 net.IP
 
 	// Iterate over upstream DNS servers
+	// TODO: Add primary adn secondary upstream DNS servers or select random one from list
 	for _, upstreamAddr := range config.UpstreamDNSServers {
 		// Resolve IPv4
 		msgIPv4 := &dns.Msg{}
@@ -108,22 +109,26 @@ func resolveBothWithUpstream(host string, clientIP net.IP) (net.IP, net.IP) {
 
 		respIPv4, _, err := client.Exchange(msgIPv4, upstreamAddr)
 		if err == nil && len(respIPv4.Answer) > 0 {
+
 			if a, ok := respIPv4.Answer[0].(*dns.A); ok {
 				ipv4 = a.A
-				break
+				//break
 			}
+
 		}
 
 		// Resolve IPv6
 		msgIPv6 := &dns.Msg{}
 		msgIPv6.SetQuestion(dns.Fqdn(host), dns.TypeAAAA)
+
 		log.Println("Resolving with upstream DNS for IPv6:", upstreamAddr, clientIP, host)
 
 		respIPv6, _, err := client.Exchange(msgIPv6, upstreamAddr)
+
 		if err == nil && len(respIPv6.Answer) > 0 {
 			if aaaa, ok := respIPv6.Answer[0].(*dns.AAAA); ok {
 				ipv6 = aaaa.AAAA
-				break
+				//break
 			}
 		}
 	}
@@ -185,6 +190,7 @@ func handleDNSRequest(w dns.ResponseWriter, r *dns.Msg) {
 				A: ipv4,
 			}
 			m.Answer = append(m.Answer, &answerIPv4)
+			log.Println("Answer v4:", answerIPv4)
 
 			// IPv6
 			if ipv6 != nil {
@@ -198,6 +204,8 @@ func handleDNSRequest(w dns.ResponseWriter, r *dns.Msg) {
 					AAAA: ipv6,
 				}
 				m.Answer = append(m.Answer, &answerIPv6)
+				log.Println("Answer v6:", answerIPv6)
+
 			}
 
 		} else {
@@ -245,6 +253,7 @@ func SigtermHandler(signal os.Signal) {
 }
 
 func main() {
+	var appVersion = "0.1.2"
 	var configFile string
 	var wg = new(sync.WaitGroup)
 
@@ -269,7 +278,7 @@ func main() {
 		// Настройка логгера для использования мультирайтера
 		log.SetOutput(multiWriter)
 		//log.SetOutput(logFile)
-		log.Println("Logging enabled")
+		log.Println("Logging enabled. Version:", appVersion)
 	} else {
 		log.Println("Logging disabled")
 	}
