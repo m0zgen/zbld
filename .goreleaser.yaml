@@ -1,5 +1,5 @@
 # Documentation at https://goreleaser.com
-project_name: getmyip
+project_name: zdns
 
 before:
   hooks:
