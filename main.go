@@ -229,10 +229,10 @@ func handleDNSRequest(w dns.ResponseWriter, r *dns.Msg) {
 
 	// Check net.IP type
 	if tcpAddr, ok := w.RemoteAddr().(*net.TCPAddr); ok {
-		log.Println("TCP")
+		//log.Println("TCP")
 		clientIP = tcpAddr.IP
 	} else if udpAddr, ok := w.RemoteAddr().(*net.UDPAddr); ok {
-		log.Println("UDP")
+		//log.Println("UDP")
 		clientIP = udpAddr.IP
 	} else {
 		log.Println("Unknown network type")
