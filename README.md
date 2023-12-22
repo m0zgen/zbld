@@ -11,6 +11,18 @@ all other domains will be resolved to `0.0.0.0` as default.
 - You want to block ads and malware domains on your network.
 - zDNS can be used as `blackhole` or `abusehole` DNS server.
 
+## Features
+
+- Whitelisted domains from `hosts.txt` will be resolved to real IP address.
+- All other domains will be resolved to configured IP address in `config.yml`.
+- Configurable upstream DNS servers (`server:port`).
+- Load balancing strategies between upstream DNS servers: `robin`, `strict`.
+- IPv4, IPv6 support.
+- Configurable DNS port.
+- Enable logging optionally.
+<!-- - Detecting DNS queries type: `A`, `AAAA`, `CNAME`, `TXT`, `MX`, `NS`, `PTR`, `SRV`, `SOA`, `CAA`, `ANY`. -->
+
+
 ## Usage
 
 Build:
@@ -40,6 +52,8 @@ Example:
 upstream_dns_servers:
   - "1.1.1.1:53"
   - "8.8.8.8:53"
+# Load balancing strategies robin, strict. Default is robin
+load_balancing_strategy: "robin"
 hosts_file: "hosts.txt"
 default_ip_address: "0.0.0.0"
 dns_port: 5001
