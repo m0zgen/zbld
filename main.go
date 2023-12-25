@@ -257,6 +257,44 @@ func resolveBothWithUpstream(host string, clientIP net.IP, upstreamAddr string) 
 	return ipv4, ipv6
 }
 
+func getQTypeResponse(m *dns.Msg, question dns.Question, host string, clientIP net.IP, _host string, upstreamAd string) {
+	// Resolve using upstream DNS for names not in hosts.txt
+	//log.Println("Resolving with upstream DNS for:", clientIP, _host)
+	ipv4, ipv6 := resolveBothWithUpstream(host, clientIP, upstreamAd)
+
+	// IPv4
+	if question.Qtype == dns.TypeA {
+		answerIPv4 := dns.A{
+			Hdr: dns.RR_Header{
+				Name:   host,
+				Rrtype: dns.TypeA,
+				Class:  dns.ClassINET,
+				Ttl:    0,
+			},
+			A: ipv4,
+		}
+		m.Answer = append(m.Answer, &answerIPv4)
+		log.Println("Answer v4:", answerIPv4)
+	}
+
+	// IPv6
+	if question.Qtype == dns.TypeAAAA {
+		if ipv6 != nil {
+			answerIPv6 := dns.AAAA{
+				Hdr: dns.RR_Header{
+					Name:   host,
+					Rrtype: dns.TypeAAAA,
+					Class:  dns.ClassINET,
+					Ttl:    0,
+				},
+				AAAA: ipv6,
+			}
+			m.Answer = append(m.Answer, &answerIPv6)
+			log.Println("Answer v6:", answerIPv6)
+		}
+	}
+}
+
 func handleDNSRequest(w dns.ResponseWriter, r *dns.Msg, regexMap map[string]*regexp.Regexp) {
 
 	m := new(dns.Msg)
@@ -290,79 +328,13 @@ func handleDNSRequest(w dns.ResponseWriter, r *dns.Msg, regexMap map[string]*reg
 		upstreamAd := getUpstreamServer()
 		log.Println("Upstream server:", upstreamAd)
 
+		// Resolve using upstream DNS for names not in hosts.txt
 		if isMatching(_host, regexMap) {
-			log.Println("Resolving with upstream DNS for AAAAAA:", clientIP, _host)
-			// Resolve using upstream DNS for names not in hosts.txt
-			//log.Println("Resolving with upstream DNS for:", clientIP, _host)
-			ipv4, ipv6 := resolveBothWithUpstream(host, clientIP, upstreamAd)
-
-			// IPv4
-			if question.Qtype == dns.TypeA {
-				answerIPv4 := dns.A{
-					Hdr: dns.RR_Header{
-						Name:   host,
-						Rrtype: dns.TypeA,
-						Class:  dns.ClassINET,
-						Ttl:    0,
-					},
-					A: ipv4,
-				}
-				m.Answer = append(m.Answer, &answerIPv4)
-				log.Println("Answer v4:", answerIPv4)
-			}
-
-			// IPv6
-			if question.Qtype == dns.TypeAAAA {
-				if ipv6 != nil {
-					answerIPv6 := dns.AAAA{
-						Hdr: dns.RR_Header{
-							Name:   host,
-							Rrtype: dns.TypeAAAA,
-							Class:  dns.ClassINET,
-							Ttl:    0,
-						},
-						AAAA: ipv6,
-					}
-					m.Answer = append(m.Answer, &answerIPv6)
-					log.Println("Answer v6:", answerIPv6)
-				}
-			}
+			log.Println("Resolving with upstream DNS as RegEx:", clientIP, _host)
+			getQTypeResponse(m, question, host, clientIP, _host, upstreamAd)
 		} else if hosts[_host] {
-			// Resolve using upstream DNS for names not in hosts.txt
-			//log.Println("Resolving with upstream DNS for:", clientIP, _host)
-			ipv4, ipv6 := resolveBothWithUpstream(host, clientIP, upstreamAd)
-
-			// IPv4
-			if question.Qtype == dns.TypeA {
-				answerIPv4 := dns.A{
-					Hdr: dns.RR_Header{
-						Name:   host,
-						Rrtype: dns.TypeA,
-						Class:  dns.ClassINET,
-						Ttl:    0,
-					},
-					A: ipv4,
-				}
-				m.Answer = append(m.Answer, &answerIPv4)
-				log.Println("Answer v4:", answerIPv4)
-			}
-
-			// IPv6
-			if question.Qtype == dns.TypeAAAA {
-				if ipv6 != nil {
-					answerIPv6 := dns.AAAA{
-						Hdr: dns.RR_Header{
-							Name:   host,
-							Rrtype: dns.TypeAAAA,
-							Class:  dns.ClassINET,
-							Ttl:    0,
-						},
-						AAAA: ipv6,
-					}
-					m.Answer = append(m.Answer, &answerIPv6)
-					log.Println("Answer v6:", answerIPv6)
-				}
-			}
+			log.Println("Resolving with upstream DNS as simple line:", clientIP, _host)
+			getQTypeResponse(m, question, host, clientIP, _host, upstreamAd)
 		} else {
 			// Return 0.0.0.0 for names in hosts.txt
 			log.Println("Zero response for:", clientIP, host)
