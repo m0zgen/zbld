@@ -1,6 +1,11 @@
-google.com
-openbld.net
-ada.openbld.net
-sys-adm.in
+# [ Regex rules ] #
+/(^|^.*\.)google.(com|net)$/
+/(^|^.*\.)openbld.(net)$/
+/(^|^.*\.)sys-adm.(in)$/
+
+# [ Domain rules ] #
 github.com
 egov.kz
+
+# If add // allow all
+# //
