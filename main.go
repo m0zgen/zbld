@@ -19,7 +19,7 @@ import (
 	"time"
 )
 
-// Config структура для хранения параметров конфигурации
+// Config structure for storing configuration parameters
 type Config struct {
 	UpstreamDNSServers []string `yaml:"upstream_dns_servers"`
 	HostsFile          string   `yaml:"hosts_file"`
@@ -29,12 +29,14 @@ type Config struct {
 	BalancingStrategy  string   `yaml:"load_balancing_strategy"`
 }
 
+// Variables
 var config Config
 var hosts map[string]bool
 var mu sync.Mutex
 var currentIndex = 0
 var upstreamServers []string
 
+// Load config from file
 func loadConfig(filename string) error {
 	file, err := ioutil.ReadFile(filename)
 	if err != nil {
@@ -49,6 +51,7 @@ func loadConfig(filename string) error {
 	return nil
 }
 
+// Load hosts from file (domain rules)
 func loadHosts(filename string) error {
 	file, err := os.Open(filename)
 	if err != nil {
@@ -78,6 +81,7 @@ func loadHosts(filename string) error {
 	return nil
 }
 
+// Load hosts and find regex from hosts.txt file
 func loadHostsAndRegex(filename string, regexMap map[string]*regexp.Regexp) error {
 	file, err := os.Open(filename)
 	if err != nil {
@@ -115,6 +119,7 @@ func loadHostsAndRegex(filename string, regexMap map[string]*regexp.Regexp) erro
 	return nil
 }
 
+// Check if upstream DNS server is available
 func isUpstreamServerAvailable(upstreamAddr string, timeout time.Duration) bool {
 	conn, err := net.DialTimeout("udp", upstreamAddr, timeout)
 	if err != nil {
@@ -124,7 +129,7 @@ func isUpstreamServerAvailable(upstreamAddr string, timeout time.Duration) bool 
 	return true
 }
 
-// Strict upstream balancing
+// Strict upstream balancing policy
 func getNextUpstreamServer() string {
 
 	// Проверить доступность первого сервера
@@ -136,7 +141,7 @@ func getNextUpstreamServer() string {
 	return upstreamServers[1]
 }
 
-// Round-robin upstream balancing
+// Round-robin upstream balancing policy
 func getRobinUpstreamServer() string {
 	//mu.Lock()
 	//defer mu.Unlock()
@@ -145,6 +150,7 @@ func getRobinUpstreamServer() string {
 	return upstreamServers[currentIndex]
 }
 
+// Get upstream server and apply balancing strategy (call from DNS handler
 func getUpstreamServer() string {
 
 	switch config.BalancingStrategy {
@@ -162,6 +168,7 @@ func getUpstreamServer() string {
 
 }
 
+// Testing function
 func resolveWithUpstream(host string, clientIP net.IP) net.IP {
 	client := dns.Client{}
 
@@ -183,6 +190,7 @@ func resolveWithUpstream(host string, clientIP net.IP) net.IP {
 	return net.ParseIP(config.DefaultIPAddress)
 }
 
+// Resolve both IPv4 and IPv6 addresses using upstream DNS with selected balancing strategy
 func resolveBothWithUpstream(host string, clientIP net.IP, upstreamAddr string) (net.IP, net.IP) {
 	client := dns.Client{}
 	var ipv4, ipv6 net.IP
@@ -257,6 +265,7 @@ func resolveBothWithUpstream(host string, clientIP net.IP, upstreamAddr string) 
 	return ipv4, ipv6
 }
 
+// Get DNS response for A or AAAA query type
 func getQTypeResponse(m *dns.Msg, question dns.Question, host string, clientIP net.IP, _host string, upstreamAd string) {
 	// Resolve using upstream DNS for names not in hosts.txt
 	//log.Println("Resolving with upstream DNS for:", clientIP, _host)
@@ -295,6 +304,7 @@ func getQTypeResponse(m *dns.Msg, question dns.Question, host string, clientIP n
 	}
 }
 
+// Handle DNS request from client
 func handleDNSRequest(w dns.ResponseWriter, r *dns.Msg, regexMap map[string]*regexp.Regexp) {
 
 	m := new(dns.Msg)
@@ -355,6 +365,7 @@ func handleDNSRequest(w dns.ResponseWriter, r *dns.Msg, regexMap map[string]*reg
 	w.WriteMsg(m)
 }
 
+// Check if host matches regex pattern
 func isMatching(host string, regexMap map[string]*regexp.Regexp) bool {
 	for pattern, regex := range regexMap {
 		if regex.MatchString(host) {
@@ -365,6 +376,7 @@ func isMatching(host string, regexMap map[string]*regexp.Regexp) bool {
 	return false
 }
 
+// Init logging
 func initLogging() {
 	if config.EnableLogging {
 		log.SetFlags(log.LstdFlags | log.Lshortfile)
@@ -389,6 +401,7 @@ func SigtermHandler(signal os.Signal) {
 	}
 }
 
+// Main function with entry loads and points
 func main() {
 	var appVersion = "0.1.2"
 	var configFile string
@@ -401,8 +414,10 @@ func main() {
 		log.Fatalf("Error loading config file: %v", err)
 	}
 
+	// Get upstream DNS servers array from config
 	upstreamServers = config.UpstreamDNSServers
 
+	// Enable logging
 	initLogging()
 
 	if config.EnableLogging {
@@ -422,20 +437,23 @@ func main() {
 		log.Println("Logging disabled")
 	}
 
+	// Load hosts from file
 	if err := loadHosts(config.HostsFile); err != nil {
 		log.Fatalf("Error loading hosts file: %v", err)
 	}
 
+	// Regex map
 	regexMap := make(map[string]*regexp.Regexp)
 
-	// Загрузка хостов и регулярных выражений из файла
+	// Load hosts.txt and bind regex patterns to regexMap
 	if err := loadHostsAndRegex(config.HostsFile, regexMap); err != nil {
 		log.Fatalf("Error loading hosts and regex file: %v", err)
 	}
 
-	// Запуск сервера для обработки DNS-запросов по UDP
+	// Run DNS server instances with goroutine
 	wg.Add(2)
 
+	// Run DNS server for UDP requests
 	go func() {
 		defer wg.Done()
 
@@ -451,7 +469,7 @@ func main() {
 		}
 	}()
 
-	// Запуск сервера для обработки DNS-запросов по TCP
+	// Run DNS server for TCP requests
 	//wg.Add(1)
 	go func() {
 		defer wg.Done()
@@ -468,12 +486,12 @@ func main() {
 		}
 	}()
 
+	// Handle interrupt signals
+	// Thx: https://www.developer.com/languages/os-signals-go/
 	sigchnl := make(chan os.Signal, 1)
 	signal.Notify(sigchnl)
 	exitchnl := make(chan int)
 
-	// Handle interrupt signals
-	// Thx: https://www.developer.com/languages/os-signals-go/
 	go func() {
 		for {
 			s := <-sigchnl
@@ -484,7 +502,7 @@ func main() {
 	exitcode := <-exitchnl
 	os.Exit(exitcode)
 
-	// Ожидание завершения всех горутин
+	// Waiting for all goroutines to complete
 	wg.Wait()
 
 }
