@@ -12,6 +12,7 @@ import (
 	"net"
 	"os"
 	"os/signal"
+	"regexp"
 	"strings"
 	"sync"
 	"syscall"
@@ -74,6 +75,43 @@ func loadHosts(filename string) error {
 	//}
 
 	// End func
+	return nil
+}
+
+func loadHostsAndRegex(filename string, regexMap map[string]*regexp.Regexp) error {
+	file, err := os.Open(filename)
+	if err != nil {
+		return err
+	}
+	defer file.Close()
+
+	mu.Lock()
+	hosts = make(map[string]bool)
+	scanner := bufio.NewScanner(file)
+	for scanner.Scan() {
+		entry := scanner.Text()
+
+		if strings.HasPrefix(entry, "/") && strings.HasSuffix(entry, "/") {
+			// Это регулярное выражение, добавим его в regexMap
+			regexPattern := entry[1 : len(entry)-1]
+			log.Println("Regex pattern:", regexPattern)
+			regex, err := regexp.Compile(regexPattern)
+			if err != nil {
+				return err
+			}
+			regexMap[regexPattern] = regex
+		} else {
+			// Это обычный хост, добавим его в hosts
+			host := strings.ToLower(entry)
+			hosts[host] = true
+		}
+	}
+	mu.Unlock()
+
+	if err := scanner.Err(); err != nil {
+		return err
+	}
+
 	return nil
 }
 
@@ -219,7 +257,8 @@ func resolveBothWithUpstream(host string, clientIP net.IP, upstreamAddr string) 
 	return ipv4, ipv6
 }
 
-func handleDNSRequest(w dns.ResponseWriter, r *dns.Msg) {
+func handleDNSRequest(w dns.ResponseWriter, r *dns.Msg, regexMap map[string]*regexp.Regexp) {
+
 	m := new(dns.Msg)
 	m.SetReply(r)
 	m.Authoritative = true
@@ -251,7 +290,8 @@ func handleDNSRequest(w dns.ResponseWriter, r *dns.Msg) {
 		upstreamAd := getUpstreamServer()
 		log.Println("Upstream server:", upstreamAd)
 
-		if hosts[_host] {
+		if isMatching(_host, regexMap) {
+			log.Println("Resolving with upstream DNS for AAAAAA:", clientIP, _host)
 			// Resolve using upstream DNS for names not in hosts.txt
 			//log.Println("Resolving with upstream DNS for:", clientIP, _host)
 			ipv4, ipv6 := resolveBothWithUpstream(host, clientIP, upstreamAd)
@@ -287,7 +327,42 @@ func handleDNSRequest(w dns.ResponseWriter, r *dns.Msg) {
 					log.Println("Answer v6:", answerIPv6)
 				}
 			}
+		} else if hosts[_host] {
+			// Resolve using upstream DNS for names not in hosts.txt
+			//log.Println("Resolving with upstream DNS for:", clientIP, _host)
+			ipv4, ipv6 := resolveBothWithUpstream(host, clientIP, upstreamAd)
 
+			// IPv4
+			if question.Qtype == dns.TypeA {
+				answerIPv4 := dns.A{
+					Hdr: dns.RR_Header{
+						Name:   host,
+						Rrtype: dns.TypeA,
+						Class:  dns.ClassINET,
+						Ttl:    0,
+					},
+					A: ipv4,
+				}
+				m.Answer = append(m.Answer, &answerIPv4)
+				log.Println("Answer v4:", answerIPv4)
+			}
+
+			// IPv6
+			if question.Qtype == dns.TypeAAAA {
+				if ipv6 != nil {
+					answerIPv6 := dns.AAAA{
+						Hdr: dns.RR_Header{
+							Name:   host,
+							Rrtype: dns.TypeAAAA,
+							Class:  dns.ClassINET,
+							Ttl:    0,
+						},
+						AAAA: ipv6,
+					}
+					m.Answer = append(m.Answer, &answerIPv6)
+					log.Println("Answer v6:", answerIPv6)
+				}
+			}
 		} else {
 			// Return 0.0.0.0 for names in hosts.txt
 			log.Println("Zero response for:", clientIP, host)
@@ -306,6 +381,16 @@ func handleDNSRequest(w dns.ResponseWriter, r *dns.Msg) {
 	}
 
 	w.WriteMsg(m)
+}
+
+func isMatching(host string, regexMap map[string]*regexp.Regexp) bool {
+	for pattern, regex := range regexMap {
+		if regex.MatchString(host) {
+			log.Printf("Host %s matches regex pattern %s\n", host, pattern)
+			return true
+		}
+	}
+	return false
 }
 
 func initLogging() {
@@ -369,6 +454,13 @@ func main() {
 		log.Fatalf("Error loading hosts file: %v", err)
 	}
 
+	regexMap := make(map[string]*regexp.Regexp)
+
+	// Загрузка хостов и регулярных выражений из файла
+	if err := loadHostsAndRegex(config.HostsFile, regexMap); err != nil {
+		log.Fatalf("Error loading hosts and regex file: %v", err)
+	}
+
 	// Запуск сервера для обработки DNS-запросов по UDP
 	wg.Add(2)
 
@@ -376,7 +468,9 @@ func main() {
 		defer wg.Done()
 
 		udpServer := &dns.Server{Addr: fmt.Sprintf(":%d", config.DNSPort), Net: "udp"}
-		dns.HandleFunc(".", handleDNSRequest)
+		dns.HandleFunc(".", func(w dns.ResponseWriter, r *dns.Msg) {
+			handleDNSRequest(w, r, regexMap)
+		})
 
 		log.Printf("DNS server is listening on :%d (UDP)...\n", config.DNSPort)
 		err := udpServer.ListenAndServe()
@@ -391,7 +485,9 @@ func main() {
 		defer wg.Done()
 
 		tcpServer := &dns.Server{Addr: fmt.Sprintf(":%d", config.DNSPort), Net: "tcp"}
-		dns.HandleFunc(".", handleDNSRequest)
+		dns.HandleFunc(".", func(w dns.ResponseWriter, r *dns.Msg) {
+			handleDNSRequest(w, r, regexMap)
+		})
 
 		log.Printf("DNS server is listening on :%d (TCP)...\n", config.DNSPort)
 		err := tcpServer.ListenAndServe()
