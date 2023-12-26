@@ -22,6 +22,7 @@ all other domains will be resolved to `0.0.0.0` as default.
 - IPv4, IPv6 support.
 - Configurable DNS port.
 - Enable logging optionally.
+- Regex support for specified domains in `hosts.txt`.
 <!-- - Detecting DNS queries type: `A`, `AAAA`, `CNAME`, `TXT`, `MX`, `NS`, `PTR`, `SRV`, `SOA`, `CAA`, `ANY`. -->
 
 
