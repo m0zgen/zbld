@@ -2,6 +2,8 @@
 
 Zero Trust DNS server.
 
+![zDNS as BlackHole Server](./docs/zDNS_as_blackhole.gif)
+
 Allow only specific domains from `hosts.txt` to be resolved, 
 all other domains will be resolved to `0.0.0.0` as default.
 
