@@ -7,5 +7,6 @@ tools/builds/prev
 tools
 zdns
 # Tests
+users
 config2.yml
 hosts2.txt
