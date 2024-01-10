@@ -518,9 +518,11 @@ func SigtermHandler(signal os.Signal) {
 func main() {
 
 	var configFile string
+	var hostsFile string
 	var wg = new(sync.WaitGroup)
 
 	flag.StringVar(&configFile, "config", "config.yml", "Config file path")
+	flag.StringVar(&hostsFile, "hosts", "hosts.txt", "Hosts file path")
 	flag.Parse()
 
 	if err := loadConfig(configFile); err != nil {
@@ -557,6 +559,15 @@ func main() {
 	// Load hosts from file
 	if err := loadHosts(config.HostsFile); err != nil {
 		log.Fatalf("Error loading hosts file: %v", err)
+	}
+
+	// Загрузка hosts из файла
+	if err := loadHosts(hostsFile); err != nil {
+		log.Fatalf("Error loading hosts file: %v", err)
+	}
+
+	if config.HostsFile != hostsFile {
+		config.HostsFile = hostsFile
 	}
 
 	// Regex map
