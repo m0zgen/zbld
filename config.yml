@@ -8,6 +8,7 @@ default_ip_address: "0.0.0.0"
 dns_port: 5001
 enable_logging: true
 # If inverse is set to true, then the hosts file will be treated as a blacklist
+# instead of a whitelist. In short, if true, then the hosts file will be marked as blacklisted
 inverse: false
 # If enable_cache is set to true, then the results of DNS queries will be cached
 cache_enabled: true
