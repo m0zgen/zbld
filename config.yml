@@ -7,3 +7,15 @@ hosts_file: "hosts.txt"
 default_ip_address: "0.0.0.0"
 dns_port: 5001
 enable_logging: true
+# If inverse is set to true, then the hosts file will be treated as a blacklist
+# instead of a whitelist. In short, if true, then the hosts file will be marked as blacklisted
+inverse: false
+# If enable_cache is set to true, then the results of DNS queries will be cached
+cache_enabled: true
+# Stale cache entries will be removed after this many seconds
+cache_ttl_seconds: 3600
+# Metrice enabled
+metrics_enabled: true
+metrics_port: 4001
+# Config version
+config_version: "0.1.4"

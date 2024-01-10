@@ -5,11 +5,14 @@ import (
 	"flag"
 	"fmt"
 	"github.com/miekg/dns"
+	"github.com/prometheus/client_golang/prometheus"
+	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"gopkg.in/yaml.v2"
 	"io"
 	"io/ioutil"
 	"log"
 	"net"
+	"net/http"
 	"os"
 	"os/signal"
 	"regexp"
@@ -27,6 +30,12 @@ type Config struct {
 	DNSPort            int      `yaml:"dns_port"`
 	EnableLogging      bool     `yaml:"enable_logging"`
 	BalancingStrategy  string   `yaml:"load_balancing_strategy"`
+	Inverse            bool     `yaml:"inverse"`
+	CacheTTLSeconds    int      `yaml:"cache_ttl_seconds"`
+	CacheEnabled       bool     `yaml:"cache_enabled"`
+	MetricsEnabled     bool     `yaml:"metrics_enabled"`
+	MetricsPort        int      `yaml:"metrics_port"`
+	ConfigVersion      string   `yaml:"config_version"`
 }
 
 // Variables
@@ -35,6 +44,46 @@ var hosts map[string]bool
 var mu sync.Mutex
 var currentIndex = 0
 var upstreamServers []string
+
+// CacheEntry структура для хранения кэшированных записей
+type CacheEntry struct {
+	IPv4         net.IP
+	IPv6         net.IP
+	CreationTime time.Time
+}
+
+// Cache структура для хранения кэша
+type Cache struct {
+	mu    sync.RWMutex
+	store map[string]CacheEntry
+}
+
+// GlobalCache глобальная переменная для кэша
+var GlobalCache = Cache{
+	store: make(map[string]CacheEntry),
+}
+
+// Prometheus metrics
+var (
+	dnsQueriesTotal = prometheus.NewCounter(
+		prometheus.CounterOpts{
+			Name: "zdns_dns_queries_total",
+			Help: "Total number of DNS queries.",
+		},
+	)
+	successfulResolutionsTotal = prometheus.NewCounter(
+		prometheus.CounterOpts{
+			Name: "zdns_successful_resolutions_total",
+			Help: "Total number of successful DNS resolutions.",
+		},
+	)
+	zeroResolutionsTotal = prometheus.NewCounter(
+		prometheus.CounterOpts{
+			Name: "zdns_zero_resolutions_total",
+			Help: "Total number of zeroed DNS resolutions.",
+		},
+	)
+)
 
 // Load config from file
 func loadConfig(filename string) error {
@@ -192,12 +241,27 @@ func resolveWithUpstream(host string, clientIP net.IP) net.IP {
 
 // Resolve both IPv4 and IPv6 addresses using upstream DNS with selected balancing strategy
 func resolveBothWithUpstream(host string, clientIP net.IP, upstreamAddr string) (net.IP, net.IP) {
+
+	if config.CacheEnabled {
+		//log.Println("Cache enabled")
+		// Проверка кэша
+		GlobalCache.mu.RLock()
+		if entry, exists := GlobalCache.store[host]; exists {
+			GlobalCache.mu.RUnlock()
+			log.Printf("Cache hit for %s\n", host)
+			return entry.IPv4, entry.IPv6
+		}
+		GlobalCache.mu.RUnlock()
+	}
+
+	// Если записи в кэше нет, то делаем запрос к upstream DNS
 	client := dns.Client{}
 	var ipv4, ipv6 net.IP
 
 	// Iterate over upstream DNS servers
 	// TODO: Add primary adn secondary upstream DNS servers or select random one from list
 	//for _, upstreamAddr := range config.UpstreamDNSServers {
+
 	// Resolve IPv4
 	msgIPv4 := &dns.Msg{}
 	msgIPv4.SetQuestion(dns.Fqdn(host), dns.TypeA)
@@ -262,6 +326,13 @@ func resolveBothWithUpstream(host string, clientIP net.IP, upstreamAddr string) 
 		log.Printf("Domain %s does not have A address\n", host)
 	}
 
+	if config.CacheEnabled {
+		// Обновление кэша
+		GlobalCache.mu.Lock()
+		GlobalCache.store[host] = CacheEntry{IPv4: ipv4, IPv6: ipv6}
+		GlobalCache.mu.Unlock()
+	}
+
 	return ipv4, ipv6
 }
 
@@ -284,6 +355,7 @@ func getQTypeResponse(m *dns.Msg, question dns.Question, host string, clientIP n
 		}
 		m.Answer = append(m.Answer, &answerIPv4)
 		log.Println("Answer v4:", answerIPv4)
+		successfulResolutionsTotal.Inc()
 	}
 
 	// IPv6
@@ -300,12 +372,33 @@ func getQTypeResponse(m *dns.Msg, question dns.Question, host string, clientIP n
 			}
 			m.Answer = append(m.Answer, &answerIPv6)
 			log.Println("Answer v6:", answerIPv6)
+			successfulResolutionsTotal.Inc()
 		}
 	}
 }
 
+func returnZeroIP(m *dns.Msg, clientIP net.IP, host string) {
+
+	// Return 0.0.0.0 for names in hosts.txt
+	answer := dns.A{
+		Hdr: dns.RR_Header{
+			Name:   host,
+			Rrtype: dns.TypeA,
+			Class:  dns.ClassINET,
+			Ttl:    0,
+		},
+		A: net.ParseIP("0.0.0.0"),
+	}
+	m.Answer = append(m.Answer, &answer)
+	log.Println("Zero response for:", clientIP, host)
+	zeroResolutionsTotal.Inc()
+
+}
+
 // Handle DNS request from client
 func handleDNSRequest(w dns.ResponseWriter, r *dns.Msg, regexMap map[string]*regexp.Regexp) {
+	// Increase the DNS queries counter
+	dnsQueriesTotal.Inc()
 
 	m := new(dns.Msg)
 	m.SetReply(r)
@@ -339,26 +432,41 @@ func handleDNSRequest(w dns.ResponseWriter, r *dns.Msg, regexMap map[string]*reg
 		log.Println("Upstream server:", upstreamAd)
 
 		// Resolve using upstream DNS for names not in hosts.txt
-		if isMatching(_host, regexMap) {
-			log.Println("Resolving with upstream DNS as RegEx:", clientIP, _host)
-			getQTypeResponse(m, question, host, clientIP, _host, upstreamAd)
-		} else if hosts[_host] {
-			log.Println("Resolving with upstream DNS as simple line:", clientIP, _host)
+		if (isMatching(_host, regexMap) && !config.Inverse) || (hosts[_host] && !config.Inverse) {
+			log.Println("Resolving with upstream DNS:", clientIP, _host)
 			getQTypeResponse(m, question, host, clientIP, _host, upstreamAd)
 		} else {
-			// Return 0.0.0.0 for names in hosts.txt
-			log.Println("Zero response for:", clientIP, host)
-			answer := dns.A{
-				Hdr: dns.RR_Header{
-					Name:   host,
-					Rrtype: dns.TypeA,
-					Class:  dns.ClassINET,
-					Ttl:    0,
-				},
-				A: net.ParseIP("0.0.0.0"),
+			if (isMatching(_host, regexMap)) || (hosts[_host]) {
+				returnZeroIP(m, clientIP, host)
+			} else if config.Inverse {
+				log.Println("BBBB")
+				getQTypeResponse(m, question, host, clientIP, _host, upstreamAd)
+			} else {
+				returnZeroIP(m, clientIP, host)
 			}
-			m.Answer = append(m.Answer, &answer)
 		}
+		//if isMatching(_host, regexMap) {
+		//	if config.Inverse {
+		//		returnZeroIP(m, clientIP, host)
+		//	} else {
+		//		log.Println("Resolving with upstream DNS as RegEx:", clientIP, _host)
+		//		getQTypeResponse(m, question, host, clientIP, _host, upstreamAd)
+		//	}
+		//} else if hosts[_host] {
+		//	if config.Inverse {
+		//		returnZeroIP(m, clientIP, host)
+		//	} else {
+		//		log.Println("Resolving with upstream DNS as simple line:", clientIP, _host)
+		//		getQTypeResponse(m, question, host, clientIP, _host, upstreamAd)
+		//	}
+		//} else {
+		//	if config.Inverse {
+		//		log.Println("Resolving with upstream DNS for:", clientIP, _host)
+		//		getQTypeResponse(m, question, host, clientIP, _host, upstreamAd)
+		//	} else {
+		//		returnZeroIP(m, clientIP, host)
+		//	}
+		//}
 		mu.Unlock()
 	}
 
@@ -386,24 +494,29 @@ func initLogging() {
 
 }
 
+func initMetrics() {
+	if config.MetricsEnabled {
+		prometheus.MustRegister(dnsQueriesTotal)
+		prometheus.MustRegister(successfulResolutionsTotal)
+		prometheus.MustRegister(zeroResolutionsTotal)
+	}
+}
+
 // SigtermHandler - Catch Ctrl+C or SIGTERM
 func SigtermHandler(signal os.Signal) {
 	if signal == syscall.SIGTERM {
 		log.Println("Got kill signal. ")
-		log.Println("Program will terminate now.")
-		log.Println("Got kill signal. Exit.")
+		log.Println("Program will terminate now. Exit. Bye.")
 		os.Exit(0)
 	} else if signal == syscall.SIGINT {
-		log.Println("Got CTRL+C signal")
-		log.Println("Closing.")
-		log.Println("Got CTRL+C signal. Exit.")
+		log.Println("Got CTRL+C signal. Exit. Bye.")
 		os.Exit(0)
 	}
 }
 
 // Main function with entry loads and points
 func main() {
-	var appVersion = "0.1.2"
+
 	var configFile string
 	var wg = new(sync.WaitGroup)
 
@@ -414,9 +527,13 @@ func main() {
 		log.Fatalf("Error loading config file: %v", err)
 	}
 
+	// Show app version on start
+	var appVersion = config.ConfigVersion
 	// Get upstream DNS servers array from config
 	upstreamServers = config.UpstreamDNSServers
 
+	// Init metrics
+	initMetrics()
 	// Enable logging
 	initLogging()
 
@@ -485,6 +602,19 @@ func main() {
 			log.Printf("Error starting DNS server (TCP): %s\n", err)
 		}
 	}()
+
+	// Запуск сервера для метрик Prometheus
+	if config.MetricsEnabled {
+		wg.Add(1)
+		go func() {
+			log.Printf("Prometheus metrics server is listening on :%d...", config.MetricsPort)
+			http.Handle("/metrics", promhttp.Handler())
+			err := http.ListenAndServe(fmt.Sprintf(":%d", config.MetricsPort), nil)
+			if err != nil {
+				log.Printf("Error starting Prometheus metrics server: %s\n", err)
+			}
+		}()
+	}
 
 	// Handle interrupt signals
 	// Thx: https://www.developer.com/languages/os-signals-go/
