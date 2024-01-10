@@ -27,6 +27,7 @@ type Config struct {
 	DNSPort            int      `yaml:"dns_port"`
 	EnableLogging      bool     `yaml:"enable_logging"`
 	BalancingStrategy  string   `yaml:"load_balancing_strategy"`
+	Inverse            bool     `yaml:"inverse"`
 }
 
 // Variables
@@ -304,6 +305,23 @@ func getQTypeResponse(m *dns.Msg, question dns.Question, host string, clientIP n
 	}
 }
 
+func returnZeroIP(m *dns.Msg, clientIP net.IP, host string) {
+
+	// Return 0.0.0.0 for names in hosts.txt
+	log.Println("Zero response for:", clientIP, host)
+	answer := dns.A{
+		Hdr: dns.RR_Header{
+			Name:   host,
+			Rrtype: dns.TypeA,
+			Class:  dns.ClassINET,
+			Ttl:    0,
+		},
+		A: net.ParseIP("0.0.0.0"),
+	}
+	m.Answer = append(m.Answer, &answer)
+
+}
+
 // Handle DNS request from client
 func handleDNSRequest(w dns.ResponseWriter, r *dns.Msg, regexMap map[string]*regexp.Regexp) {
 
@@ -339,26 +357,41 @@ func handleDNSRequest(w dns.ResponseWriter, r *dns.Msg, regexMap map[string]*reg
 		log.Println("Upstream server:", upstreamAd)
 
 		// Resolve using upstream DNS for names not in hosts.txt
-		if isMatching(_host, regexMap) {
-			log.Println("Resolving with upstream DNS as RegEx:", clientIP, _host)
-			getQTypeResponse(m, question, host, clientIP, _host, upstreamAd)
-		} else if hosts[_host] {
-			log.Println("Resolving with upstream DNS as simple line:", clientIP, _host)
+		if (isMatching(_host, regexMap) && !config.Inverse) || (hosts[_host] && !config.Inverse) {
+			log.Println("Resolving with upstream DNS:", clientIP, _host)
 			getQTypeResponse(m, question, host, clientIP, _host, upstreamAd)
 		} else {
-			// Return 0.0.0.0 for names in hosts.txt
-			log.Println("Zero response for:", clientIP, host)
-			answer := dns.A{
-				Hdr: dns.RR_Header{
-					Name:   host,
-					Rrtype: dns.TypeA,
-					Class:  dns.ClassINET,
-					Ttl:    0,
-				},
-				A: net.ParseIP("0.0.0.0"),
+			if (isMatching(_host, regexMap)) || (hosts[_host]) {
+				returnZeroIP(m, clientIP, host)
+			} else if config.Inverse {
+				log.Println("BBBB")
+				getQTypeResponse(m, question, host, clientIP, _host, upstreamAd)
+			} else {
+				returnZeroIP(m, clientIP, host)
 			}
-			m.Answer = append(m.Answer, &answer)
 		}
+		//if isMatching(_host, regexMap) {
+		//	if config.Inverse {
+		//		returnZeroIP(m, clientIP, host)
+		//	} else {
+		//		log.Println("Resolving with upstream DNS as RegEx:", clientIP, _host)
+		//		getQTypeResponse(m, question, host, clientIP, _host, upstreamAd)
+		//	}
+		//} else if hosts[_host] {
+		//	if config.Inverse {
+		//		returnZeroIP(m, clientIP, host)
+		//	} else {
+		//		log.Println("Resolving with upstream DNS as simple line:", clientIP, _host)
+		//		getQTypeResponse(m, question, host, clientIP, _host, upstreamAd)
+		//	}
+		//} else {
+		//	if config.Inverse {
+		//		log.Println("Resolving with upstream DNS for:", clientIP, _host)
+		//		getQTypeResponse(m, question, host, clientIP, _host, upstreamAd)
+		//	} else {
+		//		returnZeroIP(m, clientIP, host)
+		//	}
+		//}
 		mu.Unlock()
 	}
 
