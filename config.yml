@@ -7,6 +7,7 @@ hosts_file: "hosts.txt"
 default_ip_address: "0.0.0.0"
 dns_port: 5001
 enable_logging: true
+log_file: "zdns.log"
 # If inverse is set to true, then the hosts file will be treated as a blacklist
 # instead of a whitelist. In short, if true, then the hosts file will be marked as blacklisted
 inverse: false

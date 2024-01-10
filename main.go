@@ -29,6 +29,7 @@ type Config struct {
 	DefaultIPAddress   string   `yaml:"default_ip_address"`
 	DNSPort            int      `yaml:"dns_port"`
 	EnableLogging      bool     `yaml:"enable_logging"`
+	LogFile            string   `yaml:"log_file"`
 	BalancingStrategy  string   `yaml:"load_balancing_strategy"`
 	Inverse            bool     `yaml:"inverse"`
 	CacheTTLSeconds    int      `yaml:"cache_ttl_seconds"`
@@ -439,7 +440,6 @@ func handleDNSRequest(w dns.ResponseWriter, r *dns.Msg, regexMap map[string]*reg
 			if (isMatching(_host, regexMap)) || (hosts[_host]) {
 				returnZeroIP(m, clientIP, host)
 			} else if config.Inverse {
-				log.Println("BBBB")
 				getQTypeResponse(m, question, host, clientIP, _host, upstreamAd)
 			} else {
 				returnZeroIP(m, clientIP, host)
@@ -540,7 +540,7 @@ func main() {
 	initLogging()
 
 	if config.EnableLogging {
-		logFile, err := os.Create("zdns.log")
+		logFile, err := os.Create(config.LogFile)
 		if err != nil {
 			log.Fatal("Log file creation error:", err)
 		}
