@@ -28,6 +28,8 @@ type Config struct {
 	EnableLogging      bool     `yaml:"enable_logging"`
 	BalancingStrategy  string   `yaml:"load_balancing_strategy"`
 	Inverse            bool     `yaml:"inverse"`
+	CacheTTLSeconds    int      `yaml:"cache_ttl_seconds"`
+	CacheEnabled       bool     `yaml:"cache_enabled"`
 }
 
 // Variables
@@ -36,6 +38,24 @@ var hosts map[string]bool
 var mu sync.Mutex
 var currentIndex = 0
 var upstreamServers []string
+
+// CacheEntry структура для хранения кэшированных записей
+type CacheEntry struct {
+	IPv4         net.IP
+	IPv6         net.IP
+	CreationTime time.Time
+}
+
+// Cache структура для хранения кэша
+type Cache struct {
+	mu    sync.RWMutex
+	store map[string]CacheEntry
+}
+
+// GlobalCache глобальная переменная для кэша
+var GlobalCache = Cache{
+	store: make(map[string]CacheEntry),
+}
 
 // Load config from file
 func loadConfig(filename string) error {
@@ -193,12 +213,27 @@ func resolveWithUpstream(host string, clientIP net.IP) net.IP {
 
 // Resolve both IPv4 and IPv6 addresses using upstream DNS with selected balancing strategy
 func resolveBothWithUpstream(host string, clientIP net.IP, upstreamAddr string) (net.IP, net.IP) {
+
+	if config.CacheEnabled {
+		//log.Println("Cache enabled")
+		// Проверка кэша
+		GlobalCache.mu.RLock()
+		if entry, exists := GlobalCache.store[host]; exists {
+			GlobalCache.mu.RUnlock()
+			log.Printf("Cache hit for %s\n", host)
+			return entry.IPv4, entry.IPv6
+		}
+		GlobalCache.mu.RUnlock()
+	}
+
+	// Если записи в кэше нет, то делаем запрос к upstream DNS
 	client := dns.Client{}
 	var ipv4, ipv6 net.IP
 
 	// Iterate over upstream DNS servers
 	// TODO: Add primary adn secondary upstream DNS servers or select random one from list
 	//for _, upstreamAddr := range config.UpstreamDNSServers {
+
 	// Resolve IPv4
 	msgIPv4 := &dns.Msg{}
 	msgIPv4.SetQuestion(dns.Fqdn(host), dns.TypeA)
@@ -261,6 +296,13 @@ func resolveBothWithUpstream(host string, clientIP net.IP, upstreamAddr string) 
 	} else {
 		// Домен либо не имеет записи A (IPv4), либо имеет запись AAAA (IPv6)
 		log.Printf("Domain %s does not have A address\n", host)
+	}
+
+	if config.CacheEnabled {
+		// Обновление кэша
+		GlobalCache.mu.Lock()
+		GlobalCache.store[host] = CacheEntry{IPv4: ipv4, IPv6: ipv6}
+		GlobalCache.mu.Unlock()
 	}
 
 	return ipv4, ipv6
