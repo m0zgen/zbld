@@ -5,11 +5,14 @@ import (
 	"flag"
 	"fmt"
 	"github.com/miekg/dns"
+	"github.com/prometheus/client_golang/prometheus"
+	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"gopkg.in/yaml.v2"
 	"io"
 	"io/ioutil"
 	"log"
 	"net"
+	"net/http"
 	"os"
 	"os/signal"
 	"regexp"
@@ -30,6 +33,9 @@ type Config struct {
 	Inverse            bool     `yaml:"inverse"`
 	CacheTTLSeconds    int      `yaml:"cache_ttl_seconds"`
 	CacheEnabled       bool     `yaml:"cache_enabled"`
+	MetricsEnabled     bool     `yaml:"metrics_enabled"`
+	MetricsPort        int      `yaml:"metrics_port"`
+	ConfigVersion      string   `yaml:"config_version"`
 }
 
 // Variables
@@ -56,6 +62,28 @@ type Cache struct {
 var GlobalCache = Cache{
 	store: make(map[string]CacheEntry),
 }
+
+// Prometheus metrics
+var (
+	dnsQueriesTotal = prometheus.NewCounter(
+		prometheus.CounterOpts{
+			Name: "zdns_dns_queries_total",
+			Help: "Total number of DNS queries.",
+		},
+	)
+	successfulResolutionsTotal = prometheus.NewCounter(
+		prometheus.CounterOpts{
+			Name: "zdns_successful_resolutions_total",
+			Help: "Total number of successful DNS resolutions.",
+		},
+	)
+	zeroResolutionsTotal = prometheus.NewCounter(
+		prometheus.CounterOpts{
+			Name: "zdns_zero_resolutions_total",
+			Help: "Total number of zeroed DNS resolutions.",
+		},
+	)
+)
 
 // Load config from file
 func loadConfig(filename string) error {
@@ -327,6 +355,7 @@ func getQTypeResponse(m *dns.Msg, question dns.Question, host string, clientIP n
 		}
 		m.Answer = append(m.Answer, &answerIPv4)
 		log.Println("Answer v4:", answerIPv4)
+		successfulResolutionsTotal.Inc()
 	}
 
 	// IPv6
@@ -343,6 +372,7 @@ func getQTypeResponse(m *dns.Msg, question dns.Question, host string, clientIP n
 			}
 			m.Answer = append(m.Answer, &answerIPv6)
 			log.Println("Answer v6:", answerIPv6)
+			successfulResolutionsTotal.Inc()
 		}
 	}
 }
@@ -350,7 +380,6 @@ func getQTypeResponse(m *dns.Msg, question dns.Question, host string, clientIP n
 func returnZeroIP(m *dns.Msg, clientIP net.IP, host string) {
 
 	// Return 0.0.0.0 for names in hosts.txt
-	log.Println("Zero response for:", clientIP, host)
 	answer := dns.A{
 		Hdr: dns.RR_Header{
 			Name:   host,
@@ -361,11 +390,15 @@ func returnZeroIP(m *dns.Msg, clientIP net.IP, host string) {
 		A: net.ParseIP("0.0.0.0"),
 	}
 	m.Answer = append(m.Answer, &answer)
+	log.Println("Zero response for:", clientIP, host)
+	zeroResolutionsTotal.Inc()
 
 }
 
 // Handle DNS request from client
 func handleDNSRequest(w dns.ResponseWriter, r *dns.Msg, regexMap map[string]*regexp.Regexp) {
+	// Increase the DNS queries counter
+	dnsQueriesTotal.Inc()
 
 	m := new(dns.Msg)
 	m.SetReply(r)
@@ -461,24 +494,29 @@ func initLogging() {
 
 }
 
+func initMetrics() {
+	if config.MetricsEnabled {
+		prometheus.MustRegister(dnsQueriesTotal)
+		prometheus.MustRegister(successfulResolutionsTotal)
+		prometheus.MustRegister(zeroResolutionsTotal)
+	}
+}
+
 // SigtermHandler - Catch Ctrl+C or SIGTERM
 func SigtermHandler(signal os.Signal) {
 	if signal == syscall.SIGTERM {
 		log.Println("Got kill signal. ")
-		log.Println("Program will terminate now.")
-		log.Println("Got kill signal. Exit.")
+		log.Println("Program will terminate now. Exit. Bye.")
 		os.Exit(0)
 	} else if signal == syscall.SIGINT {
-		log.Println("Got CTRL+C signal")
-		log.Println("Closing.")
-		log.Println("Got CTRL+C signal. Exit.")
+		log.Println("Got CTRL+C signal. Exit. Bye.")
 		os.Exit(0)
 	}
 }
 
 // Main function with entry loads and points
 func main() {
-	var appVersion = "0.1.2"
+
 	var configFile string
 	var wg = new(sync.WaitGroup)
 
@@ -489,9 +527,13 @@ func main() {
 		log.Fatalf("Error loading config file: %v", err)
 	}
 
+	// Show app version on start
+	var appVersion = config.ConfigVersion
 	// Get upstream DNS servers array from config
 	upstreamServers = config.UpstreamDNSServers
 
+	// Init metrics
+	initMetrics()
 	// Enable logging
 	initLogging()
 
@@ -560,6 +602,19 @@ func main() {
 			log.Printf("Error starting DNS server (TCP): %s\n", err)
 		}
 	}()
+
+	// Запуск сервера для метрик Prometheus
+	if config.MetricsEnabled {
+		wg.Add(1)
+		go func() {
+			log.Printf("Prometheus metrics server is listening on :%d...", config.MetricsPort)
+			http.Handle("/metrics", promhttp.Handler())
+			err := http.ListenAndServe(fmt.Sprintf(":%d", config.MetricsPort), nil)
+			if err != nil {
+				log.Printf("Error starting Prometheus metrics server: %s\n", err)
+			}
+		}()
+	}
 
 	// Handle interrupt signals
 	// Thx: https://www.developer.com/languages/os-signals-go/
