@@ -29,6 +29,9 @@ all other domains will be resolved to `0.0.0.0` as default.
 - Enable Caching
 - Cache DNS responses for specified TTL
 - Run zDNS as a service with different config and hosts files
+- Load lists from URLs
+- Enable / Disable loads local and remote hosts files
+- Regex support for specified domains in `hosts.txt` and `hosts_url`
 - Enable logging to file
 - Configurable log file name
 <!-- - Detecting DNS queries type: `A`, `AAAA`, `CNAME`, `TXT`, `MX`, `NS`, `PTR`, `SRV`, `SOA`, `CAA`, `ANY`. -->
