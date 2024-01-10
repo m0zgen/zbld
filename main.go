@@ -27,6 +27,7 @@ type Config struct {
 	UpstreamDNSServers []string `yaml:"upstream_dns_servers"`
 	HostsFile          string   `yaml:"hosts_file"`
 	HostsFileURL       []string `yaml:"hosts_file_url"`
+	UseLocalHosts      bool     `yaml:"use_local_hosts"`
 	UseRemoteHosts     bool     `yaml:"use_remote_hosts"`
 	DefaultIPAddress   string   `yaml:"default_ip_address"`
 	DNSPort            int      `yaml:"dns_port"`
@@ -44,6 +45,7 @@ type Config struct {
 // Variables
 var config Config
 var hosts map[string]bool
+var regexMap map[string]*regexp.Regexp
 var mu sync.Mutex
 var currentIndex = 0
 var upstreamServers []string
@@ -106,35 +108,63 @@ func loadConfig(filename string) error {
 // Load hosts from file (domain rules)
 func loadHosts(filename string, useRemote bool, urls []string) error {
 
-	// Загрузка локальных файлов
-	//for _, filename := range filenames {
-	file, err := os.Open(filename)
-	if err != nil {
-		return err
-	}
-	defer file.Close()
+	var downloadedFile string = "downloaded_" + filename
 
-	mu.Lock()
-	scanner := bufio.NewScanner(file)
-	for scanner.Scan() {
-		host := strings.ToLower(scanner.Text())
-		hosts[host] = true
-	}
-	mu.Unlock()
+	if config.UseLocalHosts {
+		log.Printf("Loading local hosts from %s\n", filename)
+		// Загрузка локальных файлов
+		//for _, filename := range filenames {
+		file, err := os.Open(filename)
+		if err != nil {
+			return err
+		}
+		defer file.Close()
 
-	if err := scanner.Err(); err != nil {
-		return err
+		mu.Lock()
+		scanner := bufio.NewScanner(file)
+		for scanner.Scan() {
+			host := strings.ToLower(scanner.Text())
+			hosts[host] = true
+		}
+		mu.Unlock()
+
+		if err := scanner.Err(); err != nil {
+			return err
+		}
+		//}
 	}
-	//}
 
 	// Загрузка удаленных файлов, если параметр UseRemoteHosts установлен в true
 	if useRemote {
+		// Проверить, существует ли файл
+		if _, err := os.Stat(downloadedFile); err == nil {
+			// Если файл существует, очистить его содержимое
+			if err := ioutil.WriteFile(downloadedFile, []byte{}, 0644); err != nil {
+				return err
+			}
+		}
+
 		for _, url := range urls {
 			response, err := http.Get(url)
 			if err != nil {
 				return err
 			}
 			defer response.Body.Close()
+
+			// Download to file
+			// Открываем файл в режиме дозаписи (или создаем, если файл не существует)
+			file, err := os.OpenFile(downloadedFile, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
+			if err != nil {
+				return err
+			}
+			defer file.Close()
+
+			// Записать данные из тела ответа в файл
+			_, err = io.Copy(file, response.Body)
+			if err != nil {
+				return err
+			}
+			//
 
 			mu.Lock()
 			scanner := bufio.NewScanner(response.Body)
@@ -147,6 +177,10 @@ func loadHosts(filename string, useRemote bool, urls []string) error {
 			if err := scanner.Err(); err != nil {
 				return err
 			}
+		}
+
+		if err := loadHostsAndRegex(downloadedFile, regexMap); err != nil {
+			log.Fatalf("Error loading hosts and regex file: %v", err)
 		}
 	}
 
@@ -553,6 +587,11 @@ func main() {
 		log.Fatalf("Error loading config file: %v", err)
 	}
 
+	// Обновить параметр hosts_file, если передан аргумент -hosts
+	if hostsFile != "" {
+		config.HostsFile = hostsFile
+	}
+
 	// Show app version on start
 	var appVersion = config.ConfigVersion
 	// Get upstream DNS servers array from config
@@ -560,6 +599,7 @@ func main() {
 
 	mu.Lock()
 	hosts = make(map[string]bool)
+	regexMap = make(map[string]*regexp.Regexp)
 	mu.Unlock()
 
 	// Load hosts from file
@@ -568,20 +608,16 @@ func main() {
 	}
 
 	// Загрузка hosts из файла
-	if err := loadHosts(hostsFile, false, nil); err != nil {
-		log.Fatalf("Error loading hosts file: %v", err)
-	}
-
-	if config.HostsFile != hostsFile {
-		config.HostsFile = hostsFile
-	}
-
-	// Regex map
-	regexMap := make(map[string]*regexp.Regexp)
+	//if err := loadHosts(hostsFile, false, nil); err != nil {
+	//	log.Fatalf("Error loading hosts file: %v", err)
+	//}
+	//
 
 	// Load hosts.txt and bind regex patterns to regexMap
-	if err := loadHostsAndRegex(config.HostsFile, regexMap); err != nil {
-		log.Fatalf("Error loading hosts and regex file: %v", err)
+	if config.UseLocalHosts {
+		if err := loadHostsAndRegex(config.HostsFile, regexMap); err != nil {
+			log.Fatalf("Error loading hosts and regex file: %v", err)
+		}
 	}
 
 	// Init metrics
