@@ -23,6 +23,14 @@ all other domains will be resolved to `0.0.0.0` as default.
 - Configurable DNS port.
 - Enable logging optionally.
 - Regex support for specified domains in `hosts.txt`.
+- zDNS as inverse server (mark `hosts.txt` as block list with `inverse` option).
+- Enable Prometheus metrics
+- Custom port for Prometheus metrics server
+- Enable Caching
+- Cache DNS responses for specified TTL
+- Run zDNS as a service with different config and hosts files
+- Enable logging to file
+- Configurable log file name
 <!-- - Detecting DNS queries type: `A`, `AAAA`, `CNAME`, `TXT`, `MX`, `NS`, `PTR`, `SRV`, `SOA`, `CAA`, `ANY`. -->
 
 
@@ -48,6 +56,12 @@ Try another domain:
 dig A facebook.com @127.0.0.1 -p 5001
 ```
 
+## Specified config file
+
+```shell
+go run main.go -config=users/user1-config.yml -hosts=users/user1-hosts.txt
+```
+
 ## Configuration
 
 Example:
@@ -59,7 +73,13 @@ upstream_dns_servers:
 load_balancing_strategy: "robin"
 hosts_file: "hosts.txt"
 default_ip_address: "0.0.0.0"
-dns_port: 5001
+dns_port: 5002
 enable_logging: true
-
+log_file: "user1-zdns.log"
+inverse: true
+cache_enabled: true
+cache_ttl_seconds: 3600
+metrics_enabled: true
+metrics_port: 4002
+config_version: "0.1.4"
 ```
