@@ -26,6 +26,8 @@ import (
 type Config struct {
 	UpstreamDNSServers []string `yaml:"upstream_dns_servers"`
 	HostsFile          string   `yaml:"hosts_file"`
+	HostsFileURL       []string `yaml:"hosts_file_url"`
+	UseRemoteHosts     bool     `yaml:"use_remote_hosts"`
 	DefaultIPAddress   string   `yaml:"default_ip_address"`
 	DNSPort            int      `yaml:"dns_port"`
 	EnableLogging      bool     `yaml:"enable_logging"`
@@ -102,7 +104,10 @@ func loadConfig(filename string) error {
 }
 
 // Load hosts from file (domain rules)
-func loadHosts(filename string) error {
+func loadHosts(filename string, useRemote bool, urls []string) error {
+
+	// Загрузка локальных файлов
+	//for _, filename := range filenames {
 	file, err := os.Open(filename)
 	if err != nil {
 		return err
@@ -110,7 +115,6 @@ func loadHosts(filename string) error {
 	defer file.Close()
 
 	mu.Lock()
-	hosts = make(map[string]bool)
 	scanner := bufio.NewScanner(file)
 	for scanner.Scan() {
 		host := strings.ToLower(scanner.Text())
@@ -121,11 +125,30 @@ func loadHosts(filename string) error {
 	if err := scanner.Err(); err != nil {
 		return err
 	}
-
-	//fmt.Println("Hosts loaded:")
-	//for host := range hosts {
-	//	fmt.Println(host)
 	//}
+
+	// Загрузка удаленных файлов, если параметр UseRemoteHosts установлен в true
+	if useRemote {
+		for _, url := range urls {
+			response, err := http.Get(url)
+			if err != nil {
+				return err
+			}
+			defer response.Body.Close()
+
+			mu.Lock()
+			scanner := bufio.NewScanner(response.Body)
+			for scanner.Scan() {
+				host := strings.ToLower(scanner.Text())
+				hosts[host] = true
+			}
+			mu.Unlock()
+
+			if err := scanner.Err(); err != nil {
+				return err
+			}
+		}
+	}
 
 	// End func
 	return nil
@@ -140,7 +163,7 @@ func loadHostsAndRegex(filename string, regexMap map[string]*regexp.Regexp) erro
 	defer file.Close()
 
 	mu.Lock()
-	hosts = make(map[string]bool)
+	//hosts = make(map[string]bool)
 	scanner := bufio.NewScanner(file)
 	for scanner.Scan() {
 		entry := scanner.Text()
@@ -490,6 +513,7 @@ func initLogging() {
 		log.SetFlags(log.LstdFlags | log.Lshortfile)
 	} else {
 		log.SetOutput(ioutil.Discard)
+		log.Println("Logging disabled")
 	}
 
 }
@@ -534,6 +558,32 @@ func main() {
 	// Get upstream DNS servers array from config
 	upstreamServers = config.UpstreamDNSServers
 
+	mu.Lock()
+	hosts = make(map[string]bool)
+	mu.Unlock()
+
+	// Load hosts from file
+	if err := loadHosts(config.HostsFile, config.UseRemoteHosts, config.HostsFileURL); err != nil {
+		log.Fatalf("Error loading hosts file: %v", err)
+	}
+
+	// Загрузка hosts из файла
+	if err := loadHosts(hostsFile, false, nil); err != nil {
+		log.Fatalf("Error loading hosts file: %v", err)
+	}
+
+	if config.HostsFile != hostsFile {
+		config.HostsFile = hostsFile
+	}
+
+	// Regex map
+	regexMap := make(map[string]*regexp.Regexp)
+
+	// Load hosts.txt and bind regex patterns to regexMap
+	if err := loadHostsAndRegex(config.HostsFile, regexMap); err != nil {
+		log.Fatalf("Error loading hosts and regex file: %v", err)
+	}
+
 	// Init metrics
 	initMetrics()
 	// Enable logging
@@ -556,27 +606,10 @@ func main() {
 		log.Println("Logging disabled")
 	}
 
-	// Load hosts from file
-	if err := loadHosts(config.HostsFile); err != nil {
-		log.Fatalf("Error loading hosts file: %v", err)
-	}
-
-	// Загрузка hosts из файла
-	if err := loadHosts(hostsFile); err != nil {
-		log.Fatalf("Error loading hosts file: %v", err)
-	}
-
-	if config.HostsFile != hostsFile {
-		config.HostsFile = hostsFile
-	}
-
-	// Regex map
-	regexMap := make(map[string]*regexp.Regexp)
-
-	// Load hosts.txt and bind regex patterns to regexMap
-	if err := loadHostsAndRegex(config.HostsFile, regexMap); err != nil {
-		log.Fatalf("Error loading hosts and regex file: %v", err)
-	}
+	//fmt.Println("dHosts loaded:")
+	//for host := range hosts {
+	//	fmt.Println(host)
+	//}
 
 	// Run DNS server instances with goroutine
 	wg.Add(2)

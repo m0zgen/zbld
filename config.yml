@@ -4,6 +4,11 @@ upstream_dns_servers:
 # Load balancing strategies robin, strict. Default is robin
 load_balancing_strategy: "robin"
 hosts_file: "hosts.txt"
+use_remote_hosts: true
+# Onlu plain text hosts file supported
+hosts_file_url:
+  - "https://raw.githubusercontent.com/m0zgen/dns-hole/master/whitelist.txt"
+#  - "https://raw.githubusercontent.com/m0zgen/dns-hole/master/regex/common-wl.txt"
 default_ip_address: "0.0.0.0"
 dns_port: 5001
 enable_logging: true
@@ -19,4 +24,4 @@ cache_ttl_seconds: 3600
 metrics_enabled: true
 metrics_port: 4001
 # Config version
-config_version: "0.1.4"
+config_version: "0.1.5"
