@@ -6,4 +6,6 @@ zdns.log
 tools/builds/prev
 tools
 zdns
+# Tests
+config2.yml
 hosts2.txt
