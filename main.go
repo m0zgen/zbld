@@ -96,6 +96,12 @@ var (
 			Help: "Total number of cached DNS names.",
 		},
 	)
+	reloadHostsTotal = prometheus.NewCounter(
+		prometheus.CounterOpts{
+			Name: "zdns_reload_hosts_total_count",
+			Help: "Total number of hosts reloads count.",
+		},
+	)
 )
 
 // Load config from file
@@ -593,6 +599,7 @@ func loadHostsWithInterval(filename string, interval time.Duration) {
 			if err := loadHosts(filename, config.UseRemoteHosts, config.HostsFileURL); err != nil {
 				log.Fatalf("Error loading hosts file: %v", err)
 			}
+			reloadHostsTotal.Inc()
 			time.Sleep(interval)
 		}
 	}()
