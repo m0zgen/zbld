@@ -57,6 +57,7 @@ type CacheEntry struct {
 	IPv4         net.IP
 	IPv6         net.IP
 	CreationTime time.Time
+	TTL          time.Duration
 }
 
 // Cache структура для хранения кэша
@@ -68,6 +69,12 @@ type Cache struct {
 // GlobalCache глобальная переменная для кэша
 var GlobalCache = Cache{
 	store: make(map[string]CacheEntry),
+}
+
+// Update cache entry creation time with TTL
+func (entry *CacheEntry) updateCreationTimeWithTTL(ttl time.Duration) {
+	entry.CreationTime = time.Now()
+	entry.TTL = ttl
 }
 
 // Prometheus metrics
@@ -319,15 +326,15 @@ func resolveBothWithUpstream(host string, clientIP net.IP, upstreamAddr string) 
 
 	if config.CacheEnabled {
 		//log.Println("Cache enabled")
-		// Проверка кэша
 		GlobalCache.mu.RLock()
-		if entry, exists := GlobalCache.store[host]; exists {
-			GlobalCache.mu.RUnlock()
+		entry, exists := GlobalCache.store[host]
+		GlobalCache.mu.RUnlock()
+
+		if exists {
 			log.Printf("Cache hit for %s\n", host)
 			return entry.IPv4, entry.IPv6
 			cacheHitTotal.Inc()
 		}
-		GlobalCache.mu.RUnlock()
 	}
 
 	// Если записи в кэше нет, то делаем запрос к upstream DNS
@@ -406,6 +413,9 @@ func resolveBothWithUpstream(host string, clientIP net.IP, upstreamAddr string) 
 		// Обновление кэша
 		GlobalCache.mu.Lock()
 		GlobalCache.store[host] = CacheEntry{IPv4: ipv4, IPv6: ipv6}
+		entry := GlobalCache.store[host]
+		entry.updateCreationTimeWithTTL(time.Duration(config.CacheTTLSeconds) * time.Second)
+		GlobalCache.store[host] = entry
 		GlobalCache.mu.Unlock()
 	}
 
