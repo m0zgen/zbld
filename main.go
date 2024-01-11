@@ -29,6 +29,7 @@ type Config struct {
 	HostsFileURL       []string `yaml:"hosts_file_url"`
 	UseLocalHosts      bool     `yaml:"use_local_hosts"`
 	UseRemoteHosts     bool     `yaml:"use_remote_hosts"`
+	ReloadInterval     string   `yaml:"reload_interval_duration"`
 	DefaultIPAddress   string   `yaml:"default_ip_address"`
 	DNSPort            int      `yaml:"dns_port"`
 	EnableLogging      bool     `yaml:"enable_logging"`
@@ -40,6 +41,7 @@ type Config struct {
 	MetricsEnabled     bool     `yaml:"metrics_enabled"`
 	MetricsPort        int      `yaml:"metrics_port"`
 	ConfigVersion      string   `yaml:"config_version"`
+	IsDebug            bool     `yaml:"is_debug"`
 }
 
 // Variables
@@ -145,6 +147,7 @@ func loadHosts(filename string, useRemote bool, urls []string) error {
 		}
 
 		for _, url := range urls {
+			log.Printf("Loading remote file from %s\n", url)
 			response, err := http.Get(url)
 			if err != nil {
 				return err
@@ -205,7 +208,9 @@ func loadHostsAndRegex(filename string, regexMap map[string]*regexp.Regexp) erro
 		if strings.HasPrefix(entry, "/") && strings.HasSuffix(entry, "/") {
 			// Это регулярное выражение, добавим его в regexMap
 			regexPattern := entry[1 : len(entry)-1]
-			log.Println("Regex pattern:", regexPattern)
+			if config.IsDebug {
+				log.Println("Regex pattern:", regexPattern)
+			}
 			regex, err := regexp.Compile(regexPattern)
 			if err != nil {
 				return err
@@ -572,6 +577,20 @@ func SigtermHandler(signal os.Signal) {
 	}
 }
 
+func loadHostsWithInterval(filename string, interval time.Duration) {
+
+	// Горутина для периодической загрузки
+	go func() {
+		for {
+			log.Println("Reloading hosts or URL file...")
+			if err := loadHosts(filename, config.UseRemoteHosts, config.HostsFileURL); err != nil {
+				log.Fatalf("Error loading hosts file: %v", err)
+			}
+			time.Sleep(interval)
+		}
+	}()
+}
+
 // Main function with entry loads and points
 func main() {
 
@@ -587,6 +606,12 @@ func main() {
 		log.Fatalf("Error loading config file: %v", err)
 	}
 
+	// Парсинг интервала обновления hosts
+	ReloadInterval, err := time.ParseDuration(config.ReloadInterval)
+	if err != nil {
+		log.Fatalf("Error parsing interval duration: %v", err)
+	}
+
 	// Обновить параметр hosts_file, если передан аргумент -hosts
 	if hostsFile != "" {
 		config.HostsFile = hostsFile
@@ -597,15 +622,19 @@ func main() {
 	// Get upstream DNS servers array from config
 	upstreamServers = config.UpstreamDNSServers
 
+	// Init global vars
 	mu.Lock()
 	hosts = make(map[string]bool)
 	regexMap = make(map[string]*regexp.Regexp)
 	mu.Unlock()
 
 	// Load hosts from file
-	if err := loadHosts(config.HostsFile, config.UseRemoteHosts, config.HostsFileURL); err != nil {
-		log.Fatalf("Error loading hosts file: %v", err)
-	}
+	//if err := loadHosts(config.HostsFile, config.UseRemoteHosts, config.HostsFileURL); err != nil {
+	//	log.Fatalf("Error loading hosts file: %v", err)
+	//}
+
+	// Загрузка hosts и regex с интервалом 1 час
+	loadHostsWithInterval(config.HostsFile, ReloadInterval)
 
 	// Загрузка hosts из файла
 	//if err := loadHosts(hostsFile, false, nil); err != nil {
@@ -642,10 +671,12 @@ func main() {
 		log.Println("Logging disabled")
 	}
 
-	//fmt.Println("dHosts loaded:")
-	//for host := range hosts {
-	//	fmt.Println(host)
-	//}
+	if config.IsDebug {
+		fmt.Println("Hosts loaded:")
+		for host := range hosts {
+			fmt.Println(host)
+		}
+	}
 
 	// Run DNS server instances with goroutine
 	wg.Add(2)

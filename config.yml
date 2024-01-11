@@ -10,6 +10,9 @@ use_remote_hosts: true
 hosts_file_url:
   - "https://raw.githubusercontent.com/m0zgen/dns-hole/master/whitelist.txt"
   - "https://raw.githubusercontent.com/m0zgen/dns-hole/master/regex/common-wl.txt"
+# Remote and local host files reload interval
+reload_interval_duration: 1h
+# Default respond for restricted domains
 default_ip_address: "0.0.0.0"
 dns_port: 5001
 enable_logging: true
@@ -26,3 +29,4 @@ metrics_enabled: true
 metrics_port: 4001
 # Config version
 config_version: "0.1.5"
+is_debug: false
