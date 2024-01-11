@@ -90,6 +90,12 @@ var (
 			Help: "Total number of zeroed DNS resolutions.",
 		},
 	)
+	cacheHitTotal = prometheus.NewCounter(
+		prometheus.CounterOpts{
+			Name: "zdns_cache_hit_total",
+			Help: "Total number of cached DNS names.",
+		},
+	)
 )
 
 // Load config from file
@@ -313,6 +319,7 @@ func resolveBothWithUpstream(host string, clientIP net.IP, upstreamAddr string) 
 			GlobalCache.mu.RUnlock()
 			log.Printf("Cache hit for %s\n", host)
 			return entry.IPv4, entry.IPv6
+			cacheHitTotal.Inc()
 		}
 		GlobalCache.mu.RUnlock()
 	}
