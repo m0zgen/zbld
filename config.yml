@@ -24,7 +24,7 @@ inverse: false
 cache_enabled: true
 # Stale cache entries will be removed after this many seconds
 cache_ttl_seconds: 3600
-# Metrice enabled
+# Metrics enabled
 metrics_enabled: true
 metrics_port: 4001
 # Config version
