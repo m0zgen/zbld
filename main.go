@@ -827,9 +827,10 @@ func main() {
 	}()
 
 	exitcode := <-exitchnl
-	os.Exit(exitcode)
 
 	// Waiting for all goroutines to complete
 	wg.Wait()
+
+	os.Exit(exitcode)
 
 }
