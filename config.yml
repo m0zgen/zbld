@@ -4,9 +4,19 @@ upstream_dns_servers:
 # Load balancing strategies robin, strict. Default is robin
 load_balancing_strategy: "robin"
 hosts_file: "hosts.txt"
+use_local_hosts: true
+use_remote_hosts: true
+# Plain text and /regex/ hosts file supported
+hosts_file_url:
+  - "https://raw.githubusercontent.com/m0zgen/dns-hole/master/whitelist.txt"
+  - "https://raw.githubusercontent.com/m0zgen/dns-hole/master/regex/common-wl.txt"
+# Remote and local host files reload interval
+reload_interval_duration: 1h
+# Default respond for restricted domains
 default_ip_address: "0.0.0.0"
 dns_port: 5001
 enable_logging: true
+log_file: "zdns.log"
 # If inverse is set to true, then the hosts file will be treated as a blacklist
 # instead of a whitelist. In short, if true, then the hosts file will be marked as blacklisted
 inverse: false
@@ -14,8 +24,16 @@ inverse: false
 cache_enabled: true
 # Stale cache entries will be removed after this many seconds
 cache_ttl_seconds: 3600
-# Metrice enabled
+# Metrics enabled
 metrics_enabled: true
 metrics_port: 4001
 # Config version
-config_version: "0.1.4"
+config_version: "0.1.5"
+is_debug: false
+# Extra options
+permanent_enabled: true
+permanent_whitelisted: "hosts-permanent.txt"
+# Upstream DNS servers for permanent whitelisted domains
+permanent_dns_servers:
+  - "95.85.95.85:53"
+  - "2.56.220.2:53"

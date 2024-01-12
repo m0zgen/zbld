@@ -1,11 +1,8 @@
 # [ Regex rules ] #
-/(^|^.*\.)google.(com|net)$/
+/(^|^.*\.)yahoo.(com)$/
 /(^|^.*\.)openbld.(net)$/
 /(^|^.*\.)sys-adm.(in)$/
 
 # [ Domain rules ] #
-github.com
-egov.kz
-
-# If add // allow all
-# //
+bitbucket.org
+kaspi.kz

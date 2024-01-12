@@ -24,32 +24,46 @@ import (
 
 // Config structure for storing configuration parameters
 type Config struct {
-	UpstreamDNSServers []string `yaml:"upstream_dns_servers"`
-	HostsFile          string   `yaml:"hosts_file"`
-	DefaultIPAddress   string   `yaml:"default_ip_address"`
-	DNSPort            int      `yaml:"dns_port"`
-	EnableLogging      bool     `yaml:"enable_logging"`
-	BalancingStrategy  string   `yaml:"load_balancing_strategy"`
-	Inverse            bool     `yaml:"inverse"`
-	CacheTTLSeconds    int      `yaml:"cache_ttl_seconds"`
-	CacheEnabled       bool     `yaml:"cache_enabled"`
-	MetricsEnabled     bool     `yaml:"metrics_enabled"`
-	MetricsPort        int      `yaml:"metrics_port"`
-	ConfigVersion      string   `yaml:"config_version"`
+	UpstreamDNSServers   []string `yaml:"upstream_dns_servers"`
+	HostsFile            string   `yaml:"hosts_file"`
+	HostsFileURL         []string `yaml:"hosts_file_url"`
+	UseLocalHosts        bool     `yaml:"use_local_hosts"`
+	UseRemoteHosts       bool     `yaml:"use_remote_hosts"`
+	ReloadInterval       string   `yaml:"reload_interval_duration"`
+	DefaultIPAddress     string   `yaml:"default_ip_address"`
+	DNSPort              int      `yaml:"dns_port"`
+	EnableLogging        bool     `yaml:"enable_logging"`
+	LogFile              string   `yaml:"log_file"`
+	BalancingStrategy    string   `yaml:"load_balancing_strategy"`
+	Inverse              bool     `yaml:"inverse"`
+	CacheTTLSeconds      int      `yaml:"cache_ttl_seconds"`
+	CacheEnabled         bool     `yaml:"cache_enabled"`
+	MetricsEnabled       bool     `yaml:"metrics_enabled"`
+	MetricsPort          int      `yaml:"metrics_port"`
+	ConfigVersion        string   `yaml:"config_version"`
+	IsDebug              bool     `yaml:"is_debug"`
+	PermanentEnabled     bool     `yaml:"permanent_enabled"`
+	PermanentWhitelisted string   `yaml:"permanent_whitelisted"`
+	DNSforWhitelisted    []string `yaml:"permanent_dns_servers"`
 }
 
 // Variables
 var config Config
 var hosts map[string]bool
+var permanentHosts map[string]bool
+var regexMap map[string]*regexp.Regexp
+var permanentRegexMap map[string]*regexp.Regexp
 var mu sync.Mutex
 var currentIndex = 0
-var upstreamServers []string
+
+//var upstreamServers []string
 
 // CacheEntry структура для хранения кэшированных записей
 type CacheEntry struct {
 	IPv4         net.IP
 	IPv6         net.IP
 	CreationTime time.Time
+	TTL          time.Duration
 }
 
 // Cache структура для хранения кэша
@@ -61,6 +75,12 @@ type Cache struct {
 // GlobalCache глобальная переменная для кэша
 var GlobalCache = Cache{
 	store: make(map[string]CacheEntry),
+}
+
+// Update cache entry creation time with TTL
+func (entry *CacheEntry) updateCreationTimeWithTTL(ttl time.Duration) {
+	entry.CreationTime = time.Now()
+	entry.TTL = ttl
 }
 
 // Prometheus metrics
@@ -83,6 +103,18 @@ var (
 			Help: "Total number of zeroed DNS resolutions.",
 		},
 	)
+	cacheHitTotal = prometheus.NewCounter(
+		prometheus.CounterOpts{
+			Name: "zdns_cache_hit_total",
+			Help: "Total number of cached DNS names.",
+		},
+	)
+	reloadHostsTotal = prometheus.NewCounter(
+		prometheus.CounterOpts{
+			Name: "zdns_reload_hosts_total_count",
+			Help: "Total number of hosts reloads count.",
+		},
+	)
 )
 
 // Load config from file
@@ -101,37 +133,91 @@ func loadConfig(filename string) error {
 }
 
 // Load hosts from file (domain rules)
-func loadHosts(filename string) error {
-	file, err := os.Open(filename)
-	if err != nil {
-		return err
-	}
-	defer file.Close()
+func loadHosts(filename string, useRemote bool, urls []string, targetMap map[string]bool) error {
 
-	mu.Lock()
-	hosts = make(map[string]bool)
-	scanner := bufio.NewScanner(file)
-	for scanner.Scan() {
-		host := strings.ToLower(scanner.Text())
-		hosts[host] = true
-	}
-	mu.Unlock()
+	var downloadedFile string = "downloaded_" + filename
 
-	if err := scanner.Err(); err != nil {
-		return err
+	if config.UseLocalHosts {
+		log.Printf("Loading local hosts from %s\n", filename)
+		// Загрузка локальных файлов
+		//for _, filename := range filenames {
+		file, err := os.Open(filename)
+		if err != nil {
+			return err
+		}
+		defer file.Close()
+
+		mu.Lock()
+		scanner := bufio.NewScanner(file)
+		for scanner.Scan() {
+			host := strings.ToLower(scanner.Text())
+			targetMap[host] = true
+		}
+		mu.Unlock()
+
+		if err := scanner.Err(); err != nil {
+			return err
+		}
+		//}
 	}
 
-	//fmt.Println("Hosts loaded:")
-	//for host := range hosts {
-	//	fmt.Println(host)
-	//}
+	// Download remote host files
+	if useRemote && !strings.Contains(filename, "permanent") {
+		// Проверить, существует ли файл
+		if _, err := os.Stat(downloadedFile); err == nil {
+			// Если файл существует, очистить его содержимое
+			if err := ioutil.WriteFile(downloadedFile, []byte{}, 0644); err != nil {
+				return err
+			}
+		}
+
+		for _, url := range urls {
+			log.Printf("Loading remote file from %s\n", url)
+			response, err := http.Get(url)
+			if err != nil {
+				return err
+			}
+			defer response.Body.Close()
+
+			// Download to file
+			// Открываем файл в режиме дозаписи (или создаем, если файл не существует)
+			file, err := os.OpenFile(downloadedFile, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
+			if err != nil {
+				return err
+			}
+			defer file.Close()
+
+			// Записать данные из тела ответа в файл
+			_, err = io.Copy(file, response.Body)
+			if err != nil {
+				return err
+			}
+			//
+
+			mu.Lock()
+			scanner := bufio.NewScanner(response.Body)
+			for scanner.Scan() {
+				host := strings.ToLower(scanner.Text())
+				targetMap[host] = true
+			}
+			mu.Unlock()
+
+			if err := scanner.Err(); err != nil {
+				return err
+			}
+		}
+
+		if err := loadHostsAndRegex(downloadedFile, regexMap, targetMap); err != nil {
+			log.Fatalf("Error loading hosts and regex file: %v", err)
+		}
+	}
 
 	// End func
 	return nil
 }
 
 // Load hosts and find regex from hosts.txt file
-func loadHostsAndRegex(filename string, regexMap map[string]*regexp.Regexp) error {
+func loadHostsAndRegex(filename string, regexMap map[string]*regexp.Regexp, targetMap map[string]bool) error {
 	file, err := os.Open(filename)
 	if err != nil {
 		return err
@@ -139,7 +225,7 @@ func loadHostsAndRegex(filename string, regexMap map[string]*regexp.Regexp) erro
 	defer file.Close()
 
 	mu.Lock()
-	hosts = make(map[string]bool)
+	//hosts = make(map[string]bool)
 	scanner := bufio.NewScanner(file)
 	for scanner.Scan() {
 		entry := scanner.Text()
@@ -147,7 +233,9 @@ func loadHostsAndRegex(filename string, regexMap map[string]*regexp.Regexp) erro
 		if strings.HasPrefix(entry, "/") && strings.HasSuffix(entry, "/") {
 			// Это регулярное выражение, добавим его в regexMap
 			regexPattern := entry[1 : len(entry)-1]
-			log.Println("Regex pattern:", regexPattern)
+			if config.IsDebug {
+				log.Println("Regex pattern:", regexPattern)
+			}
 			regex, err := regexp.Compile(regexPattern)
 			if err != nil {
 				return err
@@ -156,7 +244,7 @@ func loadHostsAndRegex(filename string, regexMap map[string]*regexp.Regexp) erro
 		} else {
 			// Это обычный хост, добавим его в hosts
 			host := strings.ToLower(entry)
-			hosts[host] = true
+			targetMap[host] = true
 		}
 	}
 	mu.Unlock()
@@ -179,40 +267,40 @@ func isUpstreamServerAvailable(upstreamAddr string, timeout time.Duration) bool 
 }
 
 // Strict upstream balancing policy
-func getNextUpstreamServer() string {
+func getNextUpstreamServer(upstreams []string) string {
 
 	// Проверить доступность первого сервера
-	if isUpstreamServerAvailable(upstreamServers[0], 2*time.Second) {
-		return upstreamServers[0]
+	if isUpstreamServerAvailable(upstreams[0], 2*time.Second) {
+		return upstreams[0]
 	}
 
 	// Если первый сервер недоступен, вернуть второй
-	return upstreamServers[1]
+	return upstreams[1]
 }
 
 // Round-robin upstream balancing policy
-func getRobinUpstreamServer() string {
+func getRobinUpstreamServer(upstreams []string) string {
 	//mu.Lock()
 	//defer mu.Unlock()
 	// Простой round-robin: выбираем следующий сервер
-	currentIndex = (currentIndex + 1) % len(config.UpstreamDNSServers)
-	return upstreamServers[currentIndex]
+	currentIndex = (currentIndex + 1) % len(upstreams)
+	return upstreams[currentIndex]
 }
 
 // Get upstream server and apply balancing strategy (call from DNS handler
-func getUpstreamServer() string {
+func getUpstreamServer(upstreams []string) string {
 
 	switch config.BalancingStrategy {
 	case "robin":
 		log.Println("Round-robin strategy")
-		return getRobinUpstreamServer()
+		return getRobinUpstreamServer(upstreams)
 	case "strict":
 		log.Println("Strict strategy")
-		return getNextUpstreamServer()
+		return getNextUpstreamServer(upstreams)
 	default:
 		// Default strategy is robin
 		log.Println("Default strategy (robin)")
-		return getRobinUpstreamServer()
+		return getRobinUpstreamServer(upstreams)
 	}
 
 }
@@ -239,19 +327,34 @@ func resolveWithUpstream(host string, clientIP net.IP) net.IP {
 	return net.ParseIP(config.DefaultIPAddress)
 }
 
+func checkAndDeleteExpiredEntries() {
+	// Check and delete expired TTL entries from cache
+	GlobalCache.mu.Lock()
+	defer GlobalCache.mu.Unlock()
+
+	for key, entry := range GlobalCache.store {
+		if time.Since(entry.CreationTime) > entry.TTL {
+			delete(GlobalCache.store, key)
+		}
+	}
+}
+
 // Resolve both IPv4 and IPv6 addresses using upstream DNS with selected balancing strategy
 func resolveBothWithUpstream(host string, clientIP net.IP, upstreamAddr string) (net.IP, net.IP) {
 
 	if config.CacheEnabled {
 		//log.Println("Cache enabled")
-		// Проверка кэша
 		GlobalCache.mu.RLock()
-		if entry, exists := GlobalCache.store[host]; exists {
-			GlobalCache.mu.RUnlock()
+		entry, exists := GlobalCache.store[host]
+		GlobalCache.mu.RUnlock()
+
+		if exists {
 			log.Printf("Cache hit for %s\n", host)
+			cacheHitTotal.Inc()
+			// Check and delete expired TTL entries from cache
+			defer checkAndDeleteExpiredEntries()
 			return entry.IPv4, entry.IPv6
 		}
-		GlobalCache.mu.RUnlock()
 	}
 
 	// Если записи в кэше нет, то делаем запрос к upstream DNS
@@ -330,6 +433,9 @@ func resolveBothWithUpstream(host string, clientIP net.IP, upstreamAddr string) 
 		// Обновление кэша
 		GlobalCache.mu.Lock()
 		GlobalCache.store[host] = CacheEntry{IPv4: ipv4, IPv6: ipv6}
+		entry := GlobalCache.store[host]
+		entry.updateCreationTimeWithTTL(time.Duration(config.CacheTTLSeconds) * time.Second)
+		GlobalCache.store[host] = entry
 		GlobalCache.mu.Unlock()
 	}
 
@@ -427,20 +533,26 @@ func handleDNSRequest(w dns.ResponseWriter, r *dns.Msg, regexMap map[string]*reg
 
 		mu.Lock()
 
-		//Call round-robin
-		upstreamAd := getUpstreamServer()
-		log.Println("Upstream server:", upstreamAd)
-
-		// Resolve using upstream DNS for names not in hosts.txt
+		// Resolve default hosts using upstream DNS for names not in hosts.txt
 		if (isMatching(_host, regexMap) && !config.Inverse) || (hosts[_host] && !config.Inverse) {
-			log.Println("Resolving with upstream DNS:", clientIP, _host)
-			getQTypeResponse(m, question, host, clientIP, _host, upstreamAd)
+			upstreamDefault := getUpstreamServer(config.UpstreamDNSServers)
+			log.Println("Upstream server:", upstreamDefault)
+
+			log.Println("Resolving with upstream DNS from client::", clientIP, _host)
+			getQTypeResponse(m, question, host, clientIP, _host, upstreamDefault)
+		} else if (permanentHosts[_host]) || isMatching(_host, permanentRegexMap) && config.PermanentEnabled {
+			// Get permanent upstreams
+			upstreamPermanet := getUpstreamServer(config.DNSforWhitelisted)
+			log.Println("Resolving permanent host:", clientIP, _host)
+			getQTypeResponse(m, question, host, clientIP, _host, upstreamPermanet)
 		} else {
-			if (isMatching(_host, regexMap)) || (hosts[_host]) {
+			if (isMatching(_host, regexMap)) || (hosts[_host]) && !(permanentHosts[_host]) {
 				returnZeroIP(m, clientIP, host)
 			} else if config.Inverse {
-				log.Println("BBBB")
-				getQTypeResponse(m, question, host, clientIP, _host, upstreamAd)
+				upstreamDefault := getUpstreamServer(config.UpstreamDNSServers)
+				log.Println("Upstream server:", upstreamDefault)
+
+				getQTypeResponse(m, question, host, clientIP, _host, upstreamDefault)
 			} else {
 				returnZeroIP(m, clientIP, host)
 			}
@@ -490,6 +602,7 @@ func initLogging() {
 		log.SetFlags(log.LstdFlags | log.Lshortfile)
 	} else {
 		log.SetOutput(ioutil.Discard)
+		log.Println("Logging disabled")
 	}
 
 }
@@ -514,6 +627,36 @@ func SigtermHandler(signal os.Signal) {
 	}
 }
 
+func loadHostsWithInterval(filename string, interval time.Duration, targetMap map[string]bool) {
+
+	// Горутина для периодической загрузки
+	go func() {
+		for {
+			log.Printf("Reloading hosts or URL file... %s\n", filename)
+			if err := loadHosts(filename, config.UseRemoteHosts, config.HostsFileURL, targetMap); err != nil {
+				log.Fatalf("Error loading hosts file: %v", err)
+			}
+			reloadHostsTotal.Inc()
+			time.Sleep(interval)
+		}
+	}()
+}
+
+func loadRegexWithInterval(filename string, interval time.Duration, regexMap map[string]*regexp.Regexp, targetMap map[string]bool) {
+
+	// Горутина для периодической загрузки
+	go func() {
+		for {
+			log.Printf("Loading regex %s\n", filename)
+			if err := loadHostsAndRegex(filename, regexMap, targetMap); err != nil {
+				log.Fatalf("Error loading hosts and regex file: %v", err)
+			}
+			reloadHostsTotal.Inc()
+			time.Sleep(interval)
+		}
+	}()
+}
+
 // Main function with entry loads and points
 func main() {
 
@@ -529,10 +672,44 @@ func main() {
 		log.Fatalf("Error loading config file: %v", err)
 	}
 
+	// Парсинг интервала обновления hosts
+	ReloadInterval, err := time.ParseDuration(config.ReloadInterval)
+	if err != nil {
+		log.Fatalf("Error parsing interval duration: %v", err)
+	}
+
+	// Обновить параметр hosts_file, если передан аргумент -hosts
+	if hostsFile != "" {
+		config.HostsFile = hostsFile
+	}
+
 	// Show app version on start
 	var appVersion = config.ConfigVersion
 	// Get upstream DNS servers array from config
-	upstreamServers = config.UpstreamDNSServers
+	//upstreamServers = config.UpstreamDNSServers
+
+	// Init global vars
+	mu.Lock()
+	hosts = make(map[string]bool)
+	permanentHosts = make(map[string]bool)
+	regexMap = make(map[string]*regexp.Regexp)
+	permanentRegexMap = make(map[string]*regexp.Regexp)
+	mu.Unlock()
+
+	// Load hosts from file
+	//if err := loadHosts(config.HostsFile, config.UseRemoteHosts, config.HostsFileURL); err != nil {
+	//	log.Fatalf("Error loading hosts file: %v", err)
+	//}
+
+	// Загрузка hosts и regex с интервалом 1 час
+	loadHostsWithInterval(config.HostsFile, ReloadInterval, hosts)
+	loadHostsWithInterval(config.PermanentWhitelisted, ReloadInterval, permanentHosts)
+	loadRegexWithInterval(config.PermanentWhitelisted, ReloadInterval, permanentRegexMap, permanentHosts)
+
+	// Load hosts.txt and bind regex patterns to regexMap
+	if config.UseLocalHosts {
+		loadRegexWithInterval(config.HostsFile, ReloadInterval, regexMap, hosts)
+	}
 
 	// Init metrics
 	initMetrics()
@@ -540,7 +717,7 @@ func main() {
 	initLogging()
 
 	if config.EnableLogging {
-		logFile, err := os.Create("zdns.log")
+		logFile, err := os.Create(config.LogFile)
 		if err != nil {
 			log.Fatal("Log file creation error:", err)
 		}
@@ -556,26 +733,11 @@ func main() {
 		log.Println("Logging disabled")
 	}
 
-	// Load hosts from file
-	if err := loadHosts(config.HostsFile); err != nil {
-		log.Fatalf("Error loading hosts file: %v", err)
-	}
-
-	// Загрузка hosts из файла
-	if err := loadHosts(hostsFile); err != nil {
-		log.Fatalf("Error loading hosts file: %v", err)
-	}
-
-	if config.HostsFile != hostsFile {
-		config.HostsFile = hostsFile
-	}
-
-	// Regex map
-	regexMap := make(map[string]*regexp.Regexp)
-
-	// Load hosts.txt and bind regex patterns to regexMap
-	if err := loadHostsAndRegex(config.HostsFile, regexMap); err != nil {
-		log.Fatalf("Error loading hosts and regex file: %v", err)
+	if config.IsDebug {
+		fmt.Println("Hosts loaded:")
+		for host := range hosts {
+			fmt.Println(host)
+		}
 	}
 
 	// Run DNS server instances with goroutine
