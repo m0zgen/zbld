@@ -662,10 +662,12 @@ func main() {
 
 	var configFile string
 	var hostsFile string
+	var permanentFile string
 	var wg = new(sync.WaitGroup)
 
 	flag.StringVar(&configFile, "config", "config.yml", "Config file path")
 	flag.StringVar(&hostsFile, "hosts", "hosts.txt", "Hosts file path")
+	flag.StringVar(&permanentFile, "permanent", "hosts-permanent.txt", "Permanent hosts file path")
 	flag.Parse()
 
 	if err := loadConfig(configFile); err != nil {
@@ -681,6 +683,11 @@ func main() {
 	// Обновить параметр hosts_file, если передан аргумент -hosts
 	if hostsFile != "" {
 		config.HostsFile = hostsFile
+	}
+
+	// Обновить параметр permanent_whitelisted, если передан аргумент -permanent
+	if permanentFile != "" {
+		config.PermanentWhitelisted = permanentFile
 	}
 
 	// Show app version on start
