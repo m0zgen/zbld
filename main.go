@@ -327,6 +327,18 @@ func resolveWithUpstream(host string, clientIP net.IP) net.IP {
 	return net.ParseIP(config.DefaultIPAddress)
 }
 
+func checkAndDeleteExpiredEntries() {
+	// Check and delete expired TTL entries from cache
+	GlobalCache.mu.Lock()
+	defer GlobalCache.mu.Unlock()
+
+	for key, entry := range GlobalCache.store {
+		if time.Since(entry.CreationTime) > entry.TTL {
+			delete(GlobalCache.store, key)
+		}
+	}
+}
+
 // Resolve both IPv4 and IPv6 addresses using upstream DNS with selected balancing strategy
 func resolveBothWithUpstream(host string, clientIP net.IP, upstreamAddr string) (net.IP, net.IP) {
 
@@ -338,8 +350,10 @@ func resolveBothWithUpstream(host string, clientIP net.IP, upstreamAddr string) 
 
 		if exists {
 			log.Printf("Cache hit for %s\n", host)
-			return entry.IPv4, entry.IPv6
 			cacheHitTotal.Inc()
+			// Check and delete expired TTL entries from cache
+			defer checkAndDeleteExpiredEntries()
+			return entry.IPv4, entry.IPv6
 		}
 	}
 
