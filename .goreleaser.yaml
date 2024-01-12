@@ -29,6 +29,7 @@ archives:
       - README.md
       - config.yml
       - hosts.txt
+      - hosts-permanent.txt
 checksum:
   name_template: 'checksums.txt'
 snapshot:

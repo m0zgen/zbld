@@ -28,7 +28,7 @@ cache_ttl_seconds: 3600
 metrics_enabled: true
 metrics_port: 4001
 # Config version
-config_version: "0.1.5"
+config_version: "0.1.6"
 is_debug: false
 # Extra options
 permanent_enabled: true
