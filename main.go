@@ -24,30 +24,34 @@ import (
 
 // Config structure for storing configuration parameters
 type Config struct {
-	UpstreamDNSServers []string `yaml:"upstream_dns_servers"`
-	HostsFile          string   `yaml:"hosts_file"`
-	HostsFileURL       []string `yaml:"hosts_file_url"`
-	UseLocalHosts      bool     `yaml:"use_local_hosts"`
-	UseRemoteHosts     bool     `yaml:"use_remote_hosts"`
-	ReloadInterval     string   `yaml:"reload_interval_duration"`
-	DefaultIPAddress   string   `yaml:"default_ip_address"`
-	DNSPort            int      `yaml:"dns_port"`
-	EnableLogging      bool     `yaml:"enable_logging"`
-	LogFile            string   `yaml:"log_file"`
-	BalancingStrategy  string   `yaml:"load_balancing_strategy"`
-	Inverse            bool     `yaml:"inverse"`
-	CacheTTLSeconds    int      `yaml:"cache_ttl_seconds"`
-	CacheEnabled       bool     `yaml:"cache_enabled"`
-	MetricsEnabled     bool     `yaml:"metrics_enabled"`
-	MetricsPort        int      `yaml:"metrics_port"`
-	ConfigVersion      string   `yaml:"config_version"`
-	IsDebug            bool     `yaml:"is_debug"`
+	UpstreamDNSServers   []string `yaml:"upstream_dns_servers"`
+	HostsFile            string   `yaml:"hosts_file"`
+	HostsFileURL         []string `yaml:"hosts_file_url"`
+	UseLocalHosts        bool     `yaml:"use_local_hosts"`
+	UseRemoteHosts       bool     `yaml:"use_remote_hosts"`
+	ReloadInterval       string   `yaml:"reload_interval_duration"`
+	DefaultIPAddress     string   `yaml:"default_ip_address"`
+	DNSPort              int      `yaml:"dns_port"`
+	EnableLogging        bool     `yaml:"enable_logging"`
+	LogFile              string   `yaml:"log_file"`
+	BalancingStrategy    string   `yaml:"load_balancing_strategy"`
+	Inverse              bool     `yaml:"inverse"`
+	CacheTTLSeconds      int      `yaml:"cache_ttl_seconds"`
+	CacheEnabled         bool     `yaml:"cache_enabled"`
+	MetricsEnabled       bool     `yaml:"metrics_enabled"`
+	MetricsPort          int      `yaml:"metrics_port"`
+	ConfigVersion        string   `yaml:"config_version"`
+	IsDebug              bool     `yaml:"is_debug"`
+	PermanentWhitelisted string   `yaml:"permanent_whitelisted"`
+	DNSforWhitelisted    []string `yaml:"dns_for_whitelisted"`
 }
 
 // Variables
 var config Config
 var hosts map[string]bool
+var permanentHosts map[string]bool
 var regexMap map[string]*regexp.Regexp
+var permanentRegexMap map[string]*regexp.Regexp
 var mu sync.Mutex
 var currentIndex = 0
 var upstreamServers []string
@@ -127,7 +131,7 @@ func loadConfig(filename string) error {
 }
 
 // Load hosts from file (domain rules)
-func loadHosts(filename string, useRemote bool, urls []string) error {
+func loadHosts(filename string, useRemote bool, urls []string, targetMap map[string]bool) error {
 
 	var downloadedFile string = "downloaded_" + filename
 
@@ -145,7 +149,7 @@ func loadHosts(filename string, useRemote bool, urls []string) error {
 		scanner := bufio.NewScanner(file)
 		for scanner.Scan() {
 			host := strings.ToLower(scanner.Text())
-			hosts[host] = true
+			targetMap[host] = true
 		}
 		mu.Unlock()
 
@@ -192,7 +196,7 @@ func loadHosts(filename string, useRemote bool, urls []string) error {
 			scanner := bufio.NewScanner(response.Body)
 			for scanner.Scan() {
 				host := strings.ToLower(scanner.Text())
-				hosts[host] = true
+				targetMap[host] = true
 			}
 			mu.Unlock()
 
@@ -201,7 +205,7 @@ func loadHosts(filename string, useRemote bool, urls []string) error {
 			}
 		}
 
-		if err := loadHostsAndRegex(downloadedFile, regexMap); err != nil {
+		if err := loadHostsAndRegex(downloadedFile, regexMap, targetMap); err != nil {
 			log.Fatalf("Error loading hosts and regex file: %v", err)
 		}
 	}
@@ -211,7 +215,7 @@ func loadHosts(filename string, useRemote bool, urls []string) error {
 }
 
 // Load hosts and find regex from hosts.txt file
-func loadHostsAndRegex(filename string, regexMap map[string]*regexp.Regexp) error {
+func loadHostsAndRegex(filename string, regexMap map[string]*regexp.Regexp, targetMap map[string]bool) error {
 	file, err := os.Open(filename)
 	if err != nil {
 		return err
@@ -238,7 +242,7 @@ func loadHostsAndRegex(filename string, regexMap map[string]*regexp.Regexp) erro
 		} else {
 			// Это обычный хост, добавим его в hosts
 			host := strings.ToLower(entry)
-			hosts[host] = true
+			targetMap[host] = true
 		}
 	}
 	mu.Unlock()
@@ -600,14 +604,29 @@ func SigtermHandler(signal os.Signal) {
 	}
 }
 
-func loadHostsWithInterval(filename string, interval time.Duration) {
+func loadHostsWithInterval(filename string, interval time.Duration, targetMap map[string]bool) {
 
 	// Горутина для периодической загрузки
 	go func() {
 		for {
-			log.Println("Reloading hosts or URL file...")
-			if err := loadHosts(filename, config.UseRemoteHosts, config.HostsFileURL); err != nil {
+			log.Printf("Reloading hosts or URL file... %s\n", filename)
+			if err := loadHosts(filename, config.UseRemoteHosts, config.HostsFileURL, targetMap); err != nil {
 				log.Fatalf("Error loading hosts file: %v", err)
+			}
+			reloadHostsTotal.Inc()
+			time.Sleep(interval)
+		}
+	}()
+}
+
+func loadRegexWithInterval(filename string, interval time.Duration, regexMap map[string]*regexp.Regexp, targetMap map[string]bool) {
+
+	// Горутина для периодической загрузки
+	go func() {
+		for {
+			log.Printf("Loading regex %s\n", filename)
+			if err := loadHostsAndRegex(filename, regexMap, targetMap); err != nil {
+				log.Fatalf("Error loading hosts and regex file: %v", err)
 			}
 			reloadHostsTotal.Inc()
 			time.Sleep(interval)
@@ -649,7 +668,9 @@ func main() {
 	// Init global vars
 	mu.Lock()
 	hosts = make(map[string]bool)
+	permanentHosts = make(map[string]bool)
 	regexMap = make(map[string]*regexp.Regexp)
+	permanentRegexMap = make(map[string]*regexp.Regexp)
 	mu.Unlock()
 
 	// Load hosts from file
@@ -658,19 +679,13 @@ func main() {
 	//}
 
 	// Загрузка hosts и regex с интервалом 1 час
-	loadHostsWithInterval(config.HostsFile, ReloadInterval)
-
-	// Загрузка hosts из файла
-	//if err := loadHosts(hostsFile, false, nil); err != nil {
-	//	log.Fatalf("Error loading hosts file: %v", err)
-	//}
-	//
+	loadHostsWithInterval(config.HostsFile, ReloadInterval, hosts)
+	loadHostsWithInterval(config.PermanentWhitelisted, ReloadInterval, permanentHosts)
+	loadRegexWithInterval(config.PermanentWhitelisted, ReloadInterval, permanentRegexMap, permanentHosts)
 
 	// Load hosts.txt and bind regex patterns to regexMap
 	if config.UseLocalHosts {
-		if err := loadHostsAndRegex(config.HostsFile, regexMap); err != nil {
-			log.Fatalf("Error loading hosts and regex file: %v", err)
-		}
+		loadRegexWithInterval(config.HostsFile, ReloadInterval, regexMap, hosts)
 	}
 
 	// Init metrics
