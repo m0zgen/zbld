@@ -19,6 +19,7 @@ import (
 	"sync"
 	"syscall"
 	"time"
+	"zdns/internal/cache"
 )
 
 // Config structure for storing configuration parameters
@@ -56,31 +57,6 @@ var mu sync.Mutex
 var currentIndex = 0
 
 //var upstreamServers []string
-
-// CacheEntry структура для хранения кэшированных записей
-type CacheEntry struct {
-	IPv4         net.IP
-	IPv6         net.IP
-	CreationTime time.Time
-	TTL          time.Duration
-}
-
-// Cache структура для хранения кэша
-type Cache struct {
-	mu    sync.RWMutex
-	store map[string]CacheEntry
-}
-
-// GlobalCache глобальная переменная для кэша
-var GlobalCache = Cache{
-	store: make(map[string]CacheEntry),
-}
-
-// Update cache entry creation time with TTL
-func (entry *CacheEntry) updateCreationTimeWithTTL(ttl time.Duration) {
-	entry.CreationTime = time.Now()
-	entry.TTL = ttl
-}
 
 // Prometheus metrics
 var (
@@ -334,32 +310,20 @@ func getUpstreamServer(upstreams []string) string {
 
 }
 
-func checkAndDeleteExpiredEntries() {
-	// Check and delete expired TTL entries from cache
-	GlobalCache.mu.Lock()
-	defer GlobalCache.mu.Unlock()
-
-	for key, entry := range GlobalCache.store {
-		if time.Since(entry.CreationTime) > entry.TTL {
-			delete(GlobalCache.store, key)
-		}
-	}
-}
-
 // Resolve both IPv4 and IPv6 addresses using upstream DNS with selected balancing strategy
 func resolveBothWithUpstream(host string, clientIP net.IP, upstreamAddr string) (net.IP, net.IP) {
 
 	if config.CacheEnabled {
 		//log.Println("Cache enabled")
-		GlobalCache.mu.RLock()
-		entry, exists := GlobalCache.store[host]
-		GlobalCache.mu.RUnlock()
+		cache.GlobalCache.RLock()
+		entry, exists := cache.GlobalCache.Store[host]
+		cache.GlobalCache.RUnlock()
 
 		if exists {
 			log.Printf("Cache hit for %s\n", host)
 			cacheHitTotal.Inc()
 			// Check and delete expired TTL entries from cache
-			defer checkAndDeleteExpiredEntries()
+			defer cache.CheckAndDeleteExpiredEntries()
 			return entry.IPv4, entry.IPv6
 		}
 	}
@@ -438,12 +402,12 @@ func resolveBothWithUpstream(host string, clientIP net.IP, upstreamAddr string) 
 
 	if config.CacheEnabled {
 		// Обновление кэша
-		GlobalCache.mu.Lock()
-		GlobalCache.store[host] = CacheEntry{IPv4: ipv4, IPv6: ipv6}
-		entry := GlobalCache.store[host]
-		entry.updateCreationTimeWithTTL(time.Duration(config.CacheTTLSeconds) * time.Second)
-		GlobalCache.store[host] = entry
-		GlobalCache.mu.Unlock()
+		cache.GlobalCache.RLock()
+		cache.GlobalCache.Store[host] = cache.CacheEntry{IPv4: ipv4, IPv6: ipv6}
+		entry := cache.GlobalCache.Store[host]
+		entry.UpdateCreationTimeWithTTL(time.Duration(config.CacheTTLSeconds) * time.Second)
+		cache.GlobalCache.Store[host] = entry
+		cache.GlobalCache.RUnlock()
 	}
 
 	return ipv4, ipv6
