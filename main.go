@@ -134,7 +134,7 @@ func loadConfig(filename string) error {
 // Load hosts from file (domain rules)
 func loadHosts(filename string, useRemote bool, urls []string, targetMap map[string]bool) error {
 
-	var downloadedFile string = "downloaded_" + filename
+	var downloadedFile = "downloaded_" + filename
 
 	if config.UseLocalHosts {
 		log.Printf("Loading local hosts from %s\n", filename)
@@ -450,7 +450,7 @@ func resolveBothWithUpstream(host string, clientIP net.IP, upstreamAddr string) 
 }
 
 // Get DNS response for A or AAAA query type
-func getQTypeResponse(m *dns.Msg, question dns.Question, host string, clientIP net.IP, _host string, upstreamAd string) {
+func getQTypeResponse(m *dns.Msg, question dns.Question, host string, clientIP net.IP, upstreamAd string) {
 	// Resolve using upstream DNS for names not in hosts.txt
 	//log.Println("Resolving with upstream DNS for:", clientIP, _host)
 	ipv4, ipv6 := resolveBothWithUpstream(host, clientIP, upstreamAd)
@@ -546,12 +546,12 @@ func handleDNSRequest(w dns.ResponseWriter, r *dns.Msg, regexMap map[string]*reg
 			log.Println("Upstream server:", upstreamDefault)
 
 			log.Println("Resolving with upstream DNS from client::", clientIP, _host)
-			getQTypeResponse(m, question, host, clientIP, _host, upstreamDefault)
+			getQTypeResponse(m, question, host, clientIP, upstreamDefault)
 		} else if (permanentHosts[_host]) || isMatching(_host, permanentRegexMap) && config.PermanentEnabled {
 			// Get permanent upstreams
 			upstreamPermanet := getUpstreamServer(config.DNSforWhitelisted)
 			log.Println("Resolving permanent host:", clientIP, _host)
-			getQTypeResponse(m, question, host, clientIP, _host, upstreamPermanet)
+			getQTypeResponse(m, question, host, clientIP, upstreamPermanet)
 		} else {
 			if (isMatching(_host, regexMap)) || (hosts[_host]) && !(permanentHosts[_host]) {
 				returnZeroIP(m, clientIP, host)
@@ -559,7 +559,7 @@ func handleDNSRequest(w dns.ResponseWriter, r *dns.Msg, regexMap map[string]*reg
 				upstreamDefault := getUpstreamServer(config.UpstreamDNSServers)
 				log.Println("Upstream server:", upstreamDefault)
 
-				getQTypeResponse(m, question, host, clientIP, _host, upstreamDefault)
+				getQTypeResponse(m, question, host, clientIP, upstreamDefault)
 			} else {
 				returnZeroIP(m, clientIP, host)
 			}
