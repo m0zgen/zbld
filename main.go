@@ -9,7 +9,6 @@ import (
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"gopkg.in/yaml.v2"
 	"io"
-	"io/ioutil"
 	"log"
 	"net"
 	"net/http"
@@ -119,7 +118,7 @@ var (
 
 // Load config from file
 func loadConfig(filename string) error {
-	file, err := ioutil.ReadFile(filename)
+	file, err := os.ReadFile(filename)
 	if err != nil {
 		return err
 	}
@@ -145,7 +144,13 @@ func loadHosts(filename string, useRemote bool, urls []string, targetMap map[str
 		if err != nil {
 			return err
 		}
-		defer file.Close()
+		defer func(file *os.File) {
+			err := file.Close()
+			if err != nil {
+				log.Printf("Error closing file: %v", err)
+				return // ignore error
+			}
+		}(file)
 
 		mu.Lock()
 		scanner := bufio.NewScanner(file)
@@ -166,7 +171,7 @@ func loadHosts(filename string, useRemote bool, urls []string, targetMap map[str
 		// Проверить, существует ли файл
 		if _, err := os.Stat(downloadedFile); err == nil {
 			// Если файл существует, очистить его содержимое
-			if err := ioutil.WriteFile(downloadedFile, []byte{}, 0644); err != nil {
+			if err := os.WriteFile(downloadedFile, []byte{}, 0644); err != nil {
 				return err
 			}
 		}
@@ -177,7 +182,13 @@ func loadHosts(filename string, useRemote bool, urls []string, targetMap map[str
 			if err != nil {
 				return err
 			}
-			defer response.Body.Close()
+			defer func(Body io.ReadCloser) {
+				err := Body.Close()
+				if err != nil {
+					log.Printf("Error read body: %v", err)
+					return // ignore error
+				}
+			}(response.Body)
 
 			// Download to file
 			// Открываем файл в режиме дозаписи (или создаем, если файл не существует)
@@ -185,7 +196,13 @@ func loadHosts(filename string, useRemote bool, urls []string, targetMap map[str
 			if err != nil {
 				return err
 			}
-			defer file.Close()
+			defer func(file *os.File) {
+				err := file.Close()
+				if err != nil {
+					log.Printf("Error closing file: %v", err)
+					return // ignore error
+				}
+			}(file)
 
 			// Записать данные из тела ответа в файл
 			_, err = io.Copy(file, response.Body)
@@ -222,7 +239,13 @@ func loadHostsAndRegex(filename string, regexMap map[string]*regexp.Regexp, targ
 	if err != nil {
 		return err
 	}
-	defer file.Close()
+	defer func(file *os.File) {
+		err := file.Close()
+		if err != nil {
+			log.Printf("Error closing file: %v", err)
+			return // ignore error
+		}
+	}(file)
 
 	mu.Lock()
 	//hosts = make(map[string]bool)
@@ -262,7 +285,13 @@ func isUpstreamServerAvailable(upstreamAddr string, timeout time.Duration) bool 
 	if err != nil {
 		return false
 	}
-	defer conn.Close()
+	defer func(conn net.Conn) {
+		err := conn.Close()
+		if err != nil {
+			log.Printf("Error closing connection: %v", err)
+			return // ignore error
+		}
+	}(conn)
 	return true
 }
 
@@ -303,28 +332,6 @@ func getUpstreamServer(upstreams []string) string {
 		return getRobinUpstreamServer(upstreams)
 	}
 
-}
-
-// Testing function
-func resolveWithUpstream(host string, clientIP net.IP) net.IP {
-	client := dns.Client{}
-
-	// Iterate over upstream DNS servers
-	for _, upstreamAddr := range config.UpstreamDNSServers {
-		msg := &dns.Msg{}
-		msg.SetQuestion(dns.Fqdn(host), dns.TypeA)
-		log.Println("Resolving with upstream DNS for:", upstreamAddr, clientIP, host)
-
-		resp, _, err := client.Exchange(msg, upstreamAddr)
-		if err == nil && len(resp.Answer) > 0 {
-			// Return the first successful response from upstream
-			if a, ok := resp.Answer[0].(*dns.A); ok {
-				return a.A
-			}
-		}
-	}
-
-	return net.ParseIP(config.DefaultIPAddress)
 }
 
 func checkAndDeleteExpiredEntries() {
@@ -582,7 +589,11 @@ func handleDNSRequest(w dns.ResponseWriter, r *dns.Msg, regexMap map[string]*reg
 		mu.Unlock()
 	}
 
-	w.WriteMsg(m)
+	err := w.WriteMsg(m)
+	if err != nil {
+		log.Printf("Error writing DNS response: %v", err)
+		return
+	}
 }
 
 // Check if host matches regex pattern
@@ -601,7 +612,7 @@ func initLogging() {
 	if config.EnableLogging {
 		log.SetFlags(log.LstdFlags | log.Lshortfile)
 	} else {
-		log.SetOutput(ioutil.Discard)
+		log.SetOutput(os.Stdout)
 		log.Println("Logging disabled")
 	}
 
@@ -728,9 +739,15 @@ func main() {
 		if err != nil {
 			log.Fatal("Log file creation error:", err)
 		}
-		defer logFile.Close()
+		defer func(logFile *os.File) {
+			err := logFile.Close()
+			if err != nil {
+				log.Printf("Error closing log file: %v", err)
+				return // ignore error
+			}
+		}(logFile)
 
-		// Создание мультирайтера для записи в файл и вывода на экран
+		// Create multiwriter for logging to file and stdout
 		multiWriter := io.MultiWriter(logFile, os.Stdout)
 		// Настройка логгера для использования мультирайтера
 		log.SetOutput(multiWriter)
