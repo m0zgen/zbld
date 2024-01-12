@@ -42,8 +42,9 @@ type Config struct {
 	MetricsPort          int      `yaml:"metrics_port"`
 	ConfigVersion        string   `yaml:"config_version"`
 	IsDebug              bool     `yaml:"is_debug"`
+	PermanentEnabled     bool     `yaml:"permanent_enabled"`
 	PermanentWhitelisted string   `yaml:"permanent_whitelisted"`
-	DNSforWhitelisted    []string `yaml:"dns_for_whitelisted"`
+	DNSforWhitelisted    []string `yaml:"permanent_dns_servers"`
 }
 
 // Variables
@@ -54,7 +55,8 @@ var regexMap map[string]*regexp.Regexp
 var permanentRegexMap map[string]*regexp.Regexp
 var mu sync.Mutex
 var currentIndex = 0
-var upstreamServers []string
+
+//var upstreamServers []string
 
 // CacheEntry структура для хранения кэшированных записей
 type CacheEntry struct {
@@ -159,8 +161,8 @@ func loadHosts(filename string, useRemote bool, urls []string, targetMap map[str
 		//}
 	}
 
-	// Загрузка удаленных файлов, если параметр UseRemoteHosts установлен в true
-	if useRemote {
+	// Download remote host files
+	if useRemote && !strings.Contains(filename, "permanent") {
 		// Проверить, существует ли файл
 		if _, err := os.Stat(downloadedFile); err == nil {
 			// Если файл существует, очистить его содержимое
@@ -265,40 +267,40 @@ func isUpstreamServerAvailable(upstreamAddr string, timeout time.Duration) bool 
 }
 
 // Strict upstream balancing policy
-func getNextUpstreamServer() string {
+func getNextUpstreamServer(upstreams []string) string {
 
 	// Проверить доступность первого сервера
-	if isUpstreamServerAvailable(upstreamServers[0], 2*time.Second) {
-		return upstreamServers[0]
+	if isUpstreamServerAvailable(upstreams[0], 2*time.Second) {
+		return upstreams[0]
 	}
 
 	// Если первый сервер недоступен, вернуть второй
-	return upstreamServers[1]
+	return upstreams[1]
 }
 
 // Round-robin upstream balancing policy
-func getRobinUpstreamServer() string {
+func getRobinUpstreamServer(upstreams []string) string {
 	//mu.Lock()
 	//defer mu.Unlock()
 	// Простой round-robin: выбираем следующий сервер
-	currentIndex = (currentIndex + 1) % len(config.UpstreamDNSServers)
-	return upstreamServers[currentIndex]
+	currentIndex = (currentIndex + 1) % len(upstreams)
+	return upstreams[currentIndex]
 }
 
 // Get upstream server and apply balancing strategy (call from DNS handler
-func getUpstreamServer() string {
+func getUpstreamServer(upstreams []string) string {
 
 	switch config.BalancingStrategy {
 	case "robin":
 		log.Println("Round-robin strategy")
-		return getRobinUpstreamServer()
+		return getRobinUpstreamServer(upstreams)
 	case "strict":
 		log.Println("Strict strategy")
-		return getNextUpstreamServer()
+		return getNextUpstreamServer(upstreams)
 	default:
 		// Default strategy is robin
 		log.Println("Default strategy (robin)")
-		return getRobinUpstreamServer()
+		return getRobinUpstreamServer(upstreams)
 	}
 
 }
@@ -517,19 +519,26 @@ func handleDNSRequest(w dns.ResponseWriter, r *dns.Msg, regexMap map[string]*reg
 
 		mu.Lock()
 
-		//Call round-robin
-		upstreamAd := getUpstreamServer()
-		log.Println("Upstream server:", upstreamAd)
-
-		// Resolve using upstream DNS for names not in hosts.txt
+		// Resolve default hosts using upstream DNS for names not in hosts.txt
 		if (isMatching(_host, regexMap) && !config.Inverse) || (hosts[_host] && !config.Inverse) {
-			log.Println("Resolving with upstream DNS:", clientIP, _host)
-			getQTypeResponse(m, question, host, clientIP, _host, upstreamAd)
+			upstreamDefault := getUpstreamServer(config.UpstreamDNSServers)
+			log.Println("Upstream server:", upstreamDefault)
+
+			log.Println("Resolving with upstream DNS from client::", clientIP, _host)
+			getQTypeResponse(m, question, host, clientIP, _host, upstreamDefault)
+		} else if (permanentHosts[_host]) || isMatching(_host, permanentRegexMap) && config.PermanentEnabled {
+			// Get permanent upstreams
+			upstreamPermanet := getUpstreamServer(config.DNSforWhitelisted)
+			log.Println("Resolving permanent host:", clientIP, _host)
+			getQTypeResponse(m, question, host, clientIP, _host, upstreamPermanet)
 		} else {
-			if (isMatching(_host, regexMap)) || (hosts[_host]) {
+			if (isMatching(_host, regexMap)) || (hosts[_host]) && !(permanentHosts[_host]) {
 				returnZeroIP(m, clientIP, host)
 			} else if config.Inverse {
-				getQTypeResponse(m, question, host, clientIP, _host, upstreamAd)
+				upstreamDefault := getUpstreamServer(config.UpstreamDNSServers)
+				log.Println("Upstream server:", upstreamDefault)
+
+				getQTypeResponse(m, question, host, clientIP, _host, upstreamDefault)
 			} else {
 				returnZeroIP(m, clientIP, host)
 			}
@@ -663,7 +672,7 @@ func main() {
 	// Show app version on start
 	var appVersion = config.ConfigVersion
 	// Get upstream DNS servers array from config
-	upstreamServers = config.UpstreamDNSServers
+	//upstreamServers = config.UpstreamDNSServers
 
 	// Init global vars
 	mu.Lock()

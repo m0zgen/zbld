@@ -31,7 +31,9 @@ metrics_port: 4001
 config_version: "0.1.5"
 is_debug: false
 # Extra options
+permanent_enabled: true
 permanent_whitelisted: "hosts-permanent.txt"
-dns_for_whitelisted:
+# Upstream DNS servers for permanent whitelisted domains
+permanent_dns_servers:
   - "95.85.95.85:53"
   - "2.56.220.2:53"
