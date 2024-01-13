@@ -7,7 +7,6 @@ import (
 	"github.com/miekg/dns"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
-	"gopkg.in/yaml.v2"
 	"io"
 	"log"
 	"net"
@@ -20,36 +19,12 @@ import (
 	"syscall"
 	"time"
 	"zdns/internal/cache"
-	prom "zdns/internal/prometheus"
+	"zdns/internal/config"
+	"zdns/internal/prometheus"
 )
 
-// Config structure for storing configuration parameters
-type Config struct {
-	UpstreamDNSServers   []string `yaml:"upstream_dns_servers"`
-	HostsFile            string   `yaml:"hosts_file"`
-	HostsFileURL         []string `yaml:"hosts_file_url"`
-	UseLocalHosts        bool     `yaml:"use_local_hosts"`
-	UseRemoteHosts       bool     `yaml:"use_remote_hosts"`
-	ReloadInterval       string   `yaml:"reload_interval_duration"`
-	DefaultIPAddress     string   `yaml:"default_ip_address"`
-	DNSPort              int      `yaml:"dns_port"`
-	EnableLogging        bool     `yaml:"enable_logging"`
-	LogFile              string   `yaml:"log_file"`
-	BalancingStrategy    string   `yaml:"load_balancing_strategy"`
-	Inverse              bool     `yaml:"inverse"`
-	CacheTTLSeconds      int      `yaml:"cache_ttl_seconds"`
-	CacheEnabled         bool     `yaml:"cache_enabled"`
-	MetricsEnabled       bool     `yaml:"metrics_enabled"`
-	MetricsPort          int      `yaml:"metrics_port"`
-	ConfigVersion        string   `yaml:"config_version"`
-	IsDebug              bool     `yaml:"is_debug"`
-	PermanentEnabled     bool     `yaml:"permanent_enabled"`
-	PermanentWhitelisted string   `yaml:"permanent_whitelisted"`
-	DNSforWhitelisted    []string `yaml:"permanent_dns_servers"`
-}
-
 // Variables
-var config Config
+var config configuration.Config
 var hosts map[string]bool
 var permanentHosts map[string]bool
 var regexMap map[string]*regexp.Regexp
@@ -58,21 +33,6 @@ var mu sync.Mutex
 var currentIndex = 0
 
 //var upstreamServers []string
-
-// Load config from file
-func loadConfig(filename string) error {
-	file, err := os.ReadFile(filename)
-	if err != nil {
-		return err
-	}
-
-	err = yaml.Unmarshal(file, &config)
-	if err != nil {
-		return err
-	}
-
-	return nil
-}
 
 // Load hosts from file (domain rules)
 func loadHosts(filename string, useRemote bool, urls []string, targetMap map[string]bool) error {
@@ -614,7 +574,7 @@ func main() {
 	flag.StringVar(&permanentFile, "permanent", "hosts-permanent.txt", "Permanent hosts file path")
 	flag.Parse()
 
-	if err := loadConfig(configFile); err != nil {
+	if err := configuration.LoadConfig(configFile, &config); err != nil {
 		log.Fatalf("Error loading config file: %v", err)
 	}
 
