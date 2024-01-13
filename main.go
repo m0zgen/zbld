@@ -20,6 +20,7 @@ import (
 	"syscall"
 	"time"
 	"zdns/internal/cache"
+	prom "zdns/internal/prometheus"
 )
 
 // Config structure for storing configuration parameters
@@ -57,40 +58,6 @@ var mu sync.Mutex
 var currentIndex = 0
 
 //var upstreamServers []string
-
-// Prometheus metrics
-var (
-	dnsQueriesTotal = prometheus.NewCounter(
-		prometheus.CounterOpts{
-			Name: "zdns_dns_queries_total",
-			Help: "Total number of DNS queries.",
-		},
-	)
-	successfulResolutionsTotal = prometheus.NewCounter(
-		prometheus.CounterOpts{
-			Name: "zdns_successful_resolutions_total",
-			Help: "Total number of successful DNS resolutions.",
-		},
-	)
-	zeroResolutionsTotal = prometheus.NewCounter(
-		prometheus.CounterOpts{
-			Name: "zdns_zero_resolutions_total",
-			Help: "Total number of zeroed DNS resolutions.",
-		},
-	)
-	cacheHitTotal = prometheus.NewCounter(
-		prometheus.CounterOpts{
-			Name: "zdns_cache_hit_total",
-			Help: "Total number of cached DNS names.",
-		},
-	)
-	reloadHostsTotal = prometheus.NewCounter(
-		prometheus.CounterOpts{
-			Name: "zdns_reload_hosts_total_count",
-			Help: "Total number of hosts reloads count.",
-		},
-	)
-)
 
 // Load config from file
 func loadConfig(filename string) error {
@@ -321,7 +288,7 @@ func resolveBothWithUpstream(host string, clientIP net.IP, upstreamAddr string) 
 
 		if exists {
 			log.Printf("Cache hit for %s\n", host)
-			cacheHitTotal.Inc()
+			prom.CacheHitResponseTotal.Inc()
 			// Check and delete expired TTL entries from cache
 			defer cache.CheckAndDeleteExpiredEntries()
 			return entry.IPv4, entry.IPv6
@@ -432,7 +399,7 @@ func getQTypeResponse(m *dns.Msg, question dns.Question, host string, clientIP n
 		}
 		m.Answer = append(m.Answer, &answerIPv4)
 		log.Println("Answer v4:", answerIPv4)
-		successfulResolutionsTotal.Inc()
+		prom.SuccessfulResolutionsTotal.Inc()
 	}
 
 	// IPv6
@@ -449,7 +416,7 @@ func getQTypeResponse(m *dns.Msg, question dns.Question, host string, clientIP n
 			}
 			m.Answer = append(m.Answer, &answerIPv6)
 			log.Println("Answer v6:", answerIPv6)
-			successfulResolutionsTotal.Inc()
+			prom.SuccessfulResolutionsTotal.Inc()
 		}
 	}
 }
@@ -468,14 +435,14 @@ func returnZeroIP(m *dns.Msg, clientIP net.IP, host string) {
 	}
 	m.Answer = append(m.Answer, &answer)
 	log.Println("Zero response for:", clientIP, host)
-	zeroResolutionsTotal.Inc()
+	prom.ZeroResolutionsTotal.Inc()
 
 }
 
 // Handle DNS request from client
 func handleDNSRequest(w dns.ResponseWriter, r *dns.Msg, regexMap map[string]*regexp.Regexp) {
 	// Increase the DNS queries counter
-	dnsQueriesTotal.Inc()
+	prom.DnsQueriesTotal.Inc()
 
 	m := new(dns.Msg)
 	m.SetReply(r)
@@ -584,9 +551,11 @@ func initLogging() {
 
 func initMetrics() {
 	if config.MetricsEnabled {
-		prometheus.MustRegister(dnsQueriesTotal)
-		prometheus.MustRegister(successfulResolutionsTotal)
-		prometheus.MustRegister(zeroResolutionsTotal)
+		prometheus.MustRegister(prom.DnsQueriesTotal)
+		prometheus.MustRegister(prom.SuccessfulResolutionsTotal)
+		prometheus.MustRegister(prom.ZeroResolutionsTotal)
+		prometheus.MustRegister(prom.ReloadHostsTotal)
+		prometheus.MustRegister(prom.CacheHitResponseTotal)
 	}
 }
 
@@ -611,7 +580,7 @@ func loadHostsWithInterval(filename string, interval time.Duration, targetMap ma
 			if err := loadHosts(filename, config.UseRemoteHosts, config.HostsFileURL, targetMap); err != nil {
 				log.Fatalf("Error loading hosts file: %v", err)
 			}
-			reloadHostsTotal.Inc()
+			prom.ReloadHostsTotal.Inc()
 			time.Sleep(interval)
 		}
 	}()
@@ -626,7 +595,7 @@ func loadRegexWithInterval(filename string, interval time.Duration, regexMap map
 			if err := loadHostsAndRegex(filename, regexMap, targetMap); err != nil {
 				log.Fatalf("Error loading hosts and regex file: %v", err)
 			}
-			reloadHostsTotal.Inc()
+			prom.ReloadHostsTotal.Inc()
 			time.Sleep(interval)
 		}
 	}()
