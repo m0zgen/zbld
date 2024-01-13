@@ -1,7 +1,6 @@
 package main
 
 import (
-	"bufio"
 	"flag"
 	"fmt"
 	"github.com/miekg/dns"
@@ -19,6 +18,7 @@ import (
 	"syscall"
 	"time"
 	"zdns/internal/config"
+	"zdns/internal/lists"
 	"zdns/internal/prometheus"
 	"zdns/internal/upstreams"
 )
@@ -32,154 +32,6 @@ var permanentRegexMap map[string]*regexp.Regexp
 var mu sync.Mutex
 
 //var upstreamServers []string
-
-// Load hosts from file (domain rules)
-func loadHosts(filename string, useRemote bool, urls []string, targetMap map[string]bool) error {
-
-	var downloadedFile = "downloaded_" + filename
-
-	if config.UseLocalHosts {
-		log.Printf("Loading local hosts from %s\n", filename)
-		// Загрузка локальных файлов
-		//for _, filename := range filenames {
-		file, err := os.Open(filename)
-		if err != nil {
-			return err
-		}
-		defer func(file *os.File) {
-			err := file.Close()
-			if err != nil {
-				log.Printf("Error closing file: %v", err)
-				return // ignore error
-			}
-		}(file)
-
-		mu.Lock()
-		scanner := bufio.NewScanner(file)
-		for scanner.Scan() {
-			host := strings.ToLower(scanner.Text())
-			targetMap[host] = true
-		}
-		mu.Unlock()
-
-		if err := scanner.Err(); err != nil {
-			return err
-		}
-		//}
-	}
-
-	// Download remote host files
-	if useRemote && !strings.Contains(filename, "permanent") {
-		// Проверить, существует ли файл
-		if _, err := os.Stat(downloadedFile); err == nil {
-			// Если файл существует, очистить его содержимое
-			if err := os.WriteFile(downloadedFile, []byte{}, 0644); err != nil {
-				return err
-			}
-		}
-
-		for _, url := range urls {
-			log.Printf("Loading remote file from %s\n", url)
-			response, err := http.Get(url)
-			if err != nil {
-				return err
-			}
-			defer func(Body io.ReadCloser) {
-				err := Body.Close()
-				if err != nil {
-					log.Printf("Error read body: %v", err)
-					return // ignore error
-				}
-			}(response.Body)
-
-			// Download to file
-			// Открываем файл в режиме дозаписи (или создаем, если файл не существует)
-			file, err := os.OpenFile(downloadedFile, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
-			if err != nil {
-				return err
-			}
-			defer func(file *os.File) {
-				err := file.Close()
-				if err != nil {
-					log.Printf("Error closing file: %v", err)
-					return // ignore error
-				}
-			}(file)
-
-			// Записать данные из тела ответа в файл
-			_, err = io.Copy(file, response.Body)
-			if err != nil {
-				return err
-			}
-			//
-
-			mu.Lock()
-			scanner := bufio.NewScanner(response.Body)
-			for scanner.Scan() {
-				host := strings.ToLower(scanner.Text())
-				targetMap[host] = true
-			}
-			mu.Unlock()
-
-			if err := scanner.Err(); err != nil {
-				return err
-			}
-		}
-
-		if err := loadHostsAndRegex(downloadedFile, regexMap, targetMap); err != nil {
-			log.Fatalf("Error loading hosts and regex file: %v", err)
-		}
-	}
-
-	// End func
-	return nil
-}
-
-// Load hosts and find regex from hosts.txt file
-func loadHostsAndRegex(filename string, regexMap map[string]*regexp.Regexp, targetMap map[string]bool) error {
-	file, err := os.Open(filename)
-	if err != nil {
-		return err
-	}
-	defer func(file *os.File) {
-		err := file.Close()
-		if err != nil {
-			log.Printf("Error closing file: %v", err)
-			return // ignore error
-		}
-	}(file)
-
-	mu.Lock()
-	//hosts = make(map[string]bool)
-	scanner := bufio.NewScanner(file)
-	for scanner.Scan() {
-		entry := scanner.Text()
-
-		if strings.HasPrefix(entry, "/") && strings.HasSuffix(entry, "/") {
-			// Это регулярное выражение, добавим его в regexMap
-			regexPattern := entry[1 : len(entry)-1]
-			if config.IsDebug {
-				log.Println("Regex pattern:", regexPattern)
-			}
-			regex, err := regexp.Compile(regexPattern)
-			if err != nil {
-				return err
-			}
-			regexMap[regexPattern] = regex
-		} else {
-			// Это обычный хост, добавим его в hosts
-			host := strings.ToLower(entry)
-			targetMap[host] = true
-		}
-	}
-	mu.Unlock()
-
-	if err := scanner.Err(); err != nil {
-		return err
-	}
-
-	return nil
-}
 
 // Get DNS response for A or AAAA query type
 func getQTypeResponse(m *dns.Msg, question dns.Question, host string, clientIP net.IP, upstreamAd string) {
@@ -255,24 +107,22 @@ func handleDNSRequest(w dns.ResponseWriter, r *dns.Msg, regexMap map[string]*reg
 		mu.Lock()
 
 		// Resolve default hosts using upstream DNS for names not in hosts.txt
-		if (isMatching(_host, regexMap) && !config.Inverse) || (hosts[_host] && !config.Inverse) {
+		if (lists.IsMatching(_host, regexMap) && !config.Inverse) || (hosts[_host] && !config.Inverse) {
 			upstreamDefault := upstreams.GetUpstreamServer(config.UpstreamDNSServers, config.BalancingStrategy)
 			log.Println("Upstream server:", upstreamDefault)
-
-			log.Println("Resolving with upstream DNS from client::", clientIP, _host)
+			log.Println("Resolving regular host from client:", clientIP, _host)
 			getQTypeResponse(m, question, host, clientIP, upstreamDefault)
-		} else if (permanentHosts[_host]) || isMatching(_host, permanentRegexMap) && config.PermanentEnabled {
+		} else if (permanentHosts[_host]) || lists.IsMatching(_host, permanentRegexMap) && config.PermanentEnabled {
 			// Get permanent upstreams
 			upstreamPermanet := upstreams.GetUpstreamServer(config.DNSforWhitelisted, config.BalancingStrategy)
-			log.Println("Resolving permanent host:", clientIP, _host)
+			log.Println("Resolving permanent host from client:", clientIP, _host)
 			getQTypeResponse(m, question, host, clientIP, upstreamPermanet)
 		} else {
-			if (isMatching(_host, regexMap)) || (hosts[_host]) && !(permanentHosts[_host]) {
+			if (lists.IsMatching(_host, regexMap)) || (hosts[_host]) && !(permanentHosts[_host]) {
 				upstreams.ReturnZeroIP(m, clientIP, host)
 			} else if config.Inverse {
 				upstreamDefault := upstreams.GetUpstreamServer(config.UpstreamDNSServers, config.BalancingStrategy)
 				log.Println("Upstream server:", upstreamDefault)
-
 				getQTypeResponse(m, question, host, clientIP, upstreamDefault)
 			} else {
 				upstreams.ReturnZeroIP(m, clientIP, host)
@@ -310,17 +160,6 @@ func handleDNSRequest(w dns.ResponseWriter, r *dns.Msg, regexMap map[string]*reg
 	}
 }
 
-// Check if host matches regex pattern
-func isMatching(host string, regexMap map[string]*regexp.Regexp) bool {
-	for pattern, regex := range regexMap {
-		if regex.MatchString(host) {
-			log.Printf("Host %s matches regex pattern %s\n", host, pattern)
-			return true
-		}
-	}
-	return false
-}
-
 // Init logging
 func initLogging() {
 	if config.EnableLogging {
@@ -354,37 +193,7 @@ func SigtermHandler(signal os.Signal) {
 	}
 }
 
-func loadHostsWithInterval(filename string, interval time.Duration, targetMap map[string]bool) {
-
-	// Горутина для периодической загрузки
-	go func() {
-		for {
-			log.Printf("Reloading hosts or URL file... %s\n", filename)
-			if err := loadHosts(filename, config.UseRemoteHosts, config.HostsFileURL, targetMap); err != nil {
-				log.Fatalf("Error loading hosts file: %v", err)
-			}
-			prom.ReloadHostsTotal.Inc()
-			time.Sleep(interval)
-		}
-	}()
-}
-
-func loadRegexWithInterval(filename string, interval time.Duration, regexMap map[string]*regexp.Regexp, targetMap map[string]bool) {
-
-	// Горутина для периодической загрузки
-	go func() {
-		for {
-			log.Printf("Loading regex %s\n", filename)
-			if err := loadHostsAndRegex(filename, regexMap, targetMap); err != nil {
-				log.Fatalf("Error loading hosts and regex file: %v", err)
-			}
-			prom.ReloadHostsTotal.Inc()
-			time.Sleep(interval)
-		}
-	}()
-}
-
-// Main function with entry loads and points
+// Main function with entry lists and points
 func main() {
 
 	var configFile string
@@ -400,6 +209,8 @@ func main() {
 	if err := configuration.LoadConfig(configFile, &config); err != nil {
 		log.Fatalf("Error loading config file: %v", err)
 	}
+
+	lists.SetConfig(&config)
 
 	// Парсинг интервала обновления hosts
 	ReloadInterval, err := time.ParseDuration(config.ReloadInterval)
@@ -436,13 +247,13 @@ func main() {
 	//}
 
 	// Загрузка hosts и regex с интервалом 1 час
-	loadHostsWithInterval(config.HostsFile, ReloadInterval, hosts)
-	loadHostsWithInterval(config.PermanentWhitelisted, ReloadInterval, permanentHosts)
-	loadRegexWithInterval(config.PermanentWhitelisted, ReloadInterval, permanentRegexMap, permanentHosts)
+	lists.LoadHostsWithInterval(config.HostsFile, ReloadInterval, regexMap, hosts)
+	lists.LoadHostsWithInterval(config.PermanentWhitelisted, ReloadInterval, regexMap, permanentHosts)
+	lists.LoadRegexWithInterval(config.PermanentWhitelisted, ReloadInterval, permanentRegexMap, permanentHosts)
 
 	// Load hosts.txt and bind regex patterns to regexMap
 	if config.UseLocalHosts {
-		loadRegexWithInterval(config.HostsFile, ReloadInterval, regexMap, hosts)
+		lists.LoadRegexWithInterval(config.HostsFile, ReloadInterval, regexMap, hosts)
 	}
 
 	// Init metrics
