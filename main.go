@@ -222,24 +222,6 @@ func getQTypeResponse(m *dns.Msg, question dns.Question, host string, clientIP n
 	}
 }
 
-func returnZeroIP(m *dns.Msg, clientIP net.IP, host string) {
-
-	// Return 0.0.0.0 for names in hosts.txt
-	answer := dns.A{
-		Hdr: dns.RR_Header{
-			Name:   host,
-			Rrtype: dns.TypeA,
-			Class:  dns.ClassINET,
-			Ttl:    0,
-		},
-		A: net.ParseIP("0.0.0.0"),
-	}
-	m.Answer = append(m.Answer, &answer)
-	log.Println("Zero response for:", clientIP, host)
-	prom.ZeroResolutionsTotal.Inc()
-
-}
-
 // Handle DNS request from client
 func handleDNSRequest(w dns.ResponseWriter, r *dns.Msg, regexMap map[string]*regexp.Regexp) {
 	// Increase the DNS queries counter
@@ -286,14 +268,14 @@ func handleDNSRequest(w dns.ResponseWriter, r *dns.Msg, regexMap map[string]*reg
 			getQTypeResponse(m, question, host, clientIP, upstreamPermanet)
 		} else {
 			if (isMatching(_host, regexMap)) || (hosts[_host]) && !(permanentHosts[_host]) {
-				returnZeroIP(m, clientIP, host)
+				upstreams.ReturnZeroIP(m, clientIP, host)
 			} else if config.Inverse {
 				upstreamDefault := upstreams.GetUpstreamServer(config.UpstreamDNSServers, config.BalancingStrategy)
 				log.Println("Upstream server:", upstreamDefault)
 
 				getQTypeResponse(m, question, host, clientIP, upstreamDefault)
 			} else {
-				returnZeroIP(m, clientIP, host)
+				upstreams.ReturnZeroIP(m, clientIP, host)
 			}
 		}
 		//if isMatching(_host, regexMap) {
