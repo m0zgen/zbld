@@ -23,7 +23,7 @@ import (
 	"zdns/internal/upstreams"
 )
 
-// Variables
+// Global Variables ----------------------------------------------------------- //
 var config configuration.Config
 var hosts map[string]bool
 var permanentHosts map[string]bool
@@ -33,7 +33,9 @@ var mu sync.Mutex
 
 //var upstreamServers []string
 
-// Get DNS response for A or AAAA query type
+// Process DNS queries ------------------------------------------------------- //
+
+// getQTypeResponse - Get DNS response for A or AAAA query type
 func getQTypeResponse(m *dns.Msg, question dns.Question, host string, clientIP net.IP, upstreamAd string) {
 	// Resolve using upstream DNS for names not in hosts.txt
 	//log.Println("Resolving with upstream DNS for:", clientIP, _host)
@@ -74,7 +76,7 @@ func getQTypeResponse(m *dns.Msg, question dns.Question, host string, clientIP n
 	}
 }
 
-// Handle DNS request from client
+// handleDNSRequest - Handle DNS request from client
 func handleDNSRequest(w dns.ResponseWriter, r *dns.Msg, regexMap map[string]*regexp.Regexp) {
 	// Increase the DNS queries counter
 	prom.DnsQueriesTotal.Inc()
@@ -160,7 +162,9 @@ func handleDNSRequest(w dns.ResponseWriter, r *dns.Msg, regexMap map[string]*reg
 	}
 }
 
-// Init logging
+// Inits and Main --------------------------------------------------------------- //
+
+// InitLogging - Init logging to file and stdout
 func initLogging() {
 	if config.EnableLogging {
 		log.SetFlags(log.LstdFlags | log.Lshortfile)
@@ -171,6 +175,7 @@ func initLogging() {
 
 }
 
+// InitMetrics - Init Prometheus metrics
 func initMetrics() {
 	if config.MetricsEnabled {
 		prometheus.MustRegister(prom.DnsQueriesTotal)
@@ -193,7 +198,7 @@ func SigtermHandler(signal os.Signal) {
 	}
 }
 
-// Main function with entry lists and points
+// main - Main function. Init config, load hosts, run DNS server
 func main() {
 
 	var configFile string
@@ -201,29 +206,31 @@ func main() {
 	var permanentFile string
 	var wg = new(sync.WaitGroup)
 
+	// Parse command line arguments
 	flag.StringVar(&configFile, "config", "config.yml", "Config file path")
 	flag.StringVar(&hostsFile, "hosts", "hosts.txt", "Hosts file path")
 	flag.StringVar(&permanentFile, "permanent", "hosts-permanent.txt", "Permanent hosts file path")
 	flag.Parse()
 
+	// Load config and pass params to vars -------------------------------------- //
+
+	// Load config file
 	if err := configuration.LoadConfig(configFile, &config); err != nil {
 		log.Fatalf("Error loading config file: %v", err)
 	}
 
-	lists.SetConfig(&config)
-
-	// Парсинг интервала обновления hosts
+	// Parse hosts reload interval
 	ReloadInterval, err := time.ParseDuration(config.ReloadInterval)
 	if err != nil {
 		log.Fatalf("Error parsing interval duration: %v", err)
 	}
 
-	// Обновить параметр hosts_file, если передан аргумент -hosts
+	// Update hosts_file parameter if -hosts argument is passed
 	if hostsFile != "" {
 		config.HostsFile = hostsFile
 	}
 
-	// Обновить параметр permanent_whitelisted, если передан аргумент -permanent
+	// Update permanent_whitelisted parameter if -permanent argument is passed
 	if permanentFile != "" {
 		config.PermanentWhitelisted = permanentFile
 	}
@@ -233,7 +240,7 @@ func main() {
 	// Get upstream DNS servers array from config
 	//upstreamServers = config.UpstreamDNSServers
 
-	// Init global vars
+	// Make init global maps vars
 	mu.Lock()
 	hosts = make(map[string]bool)
 	permanentHosts = make(map[string]bool)
@@ -241,26 +248,13 @@ func main() {
 	permanentRegexMap = make(map[string]*regexp.Regexp)
 	mu.Unlock()
 
-	// Load hosts from file
-	//if err := loadHosts(config.HostsFile, config.UseRemoteHosts, config.HostsFileURL); err != nil {
-	//	log.Fatalf("Error loading hosts file: %v", err)
-	//}
-
-	// Загрузка hosts и regex с интервалом 1 час
-	lists.LoadHostsWithInterval(config.HostsFile, ReloadInterval, regexMap, hosts)
-	lists.LoadHostsWithInterval(config.PermanentWhitelisted, ReloadInterval, regexMap, permanentHosts)
-	lists.LoadRegexWithInterval(config.PermanentWhitelisted, ReloadInterval, permanentRegexMap, permanentHosts)
-
-	// Load hosts.txt and bind regex patterns to regexMap
-	if config.UseLocalHosts {
-		lists.LoadRegexWithInterval(config.HostsFile, ReloadInterval, regexMap, hosts)
-	}
+	// Init Prometheus metrics and Logging -------------------------------------- //
 
 	// Init metrics
 	initMetrics()
 	// Enable logging
 	initLogging()
-
+	// Enable logging to file and stdout
 	if config.EnableLogging {
 		logFile, err := os.Create(config.LogFile)
 		if err != nil {
@@ -276,14 +270,26 @@ func main() {
 
 		// Create multiwriter for logging to file and stdout
 		multiWriter := io.MultiWriter(logFile, os.Stdout)
-		// Настройка логгера для использования мультирайтера
+		// Setups logger to use multiwriter
 		log.SetOutput(multiWriter)
-		//log.SetOutput(logFile)
 		log.Println("Logging enabled. Version:", appVersion)
 	} else {
 		log.Println("Logging disabled")
 	}
 
+	// Load hosts with lists package -------------------------------------------- //
+
+	// Pass config to lists package
+	lists.SetConfig(&config)
+	// Load hosts and regex with config interval (default 1h)
+	lists.LoadHostsWithInterval(config.HostsFile, ReloadInterval, regexMap, hosts)
+	lists.LoadHostsWithInterval(config.PermanentWhitelisted, ReloadInterval, regexMap, permanentHosts)
+	lists.LoadRegexWithInterval(config.PermanentWhitelisted, ReloadInterval, permanentRegexMap, permanentHosts)
+	// Load hosts.txt and bind regex patterns to regexMap in to lists package
+	if config.UseLocalHosts {
+		lists.LoadRegexWithInterval(config.HostsFile, ReloadInterval, regexMap, hosts)
+	}
+	// Print more messages in to console and log for hosts files debug (after lists.LoadHosts)
 	if config.IsDebug {
 		fmt.Println("Hosts loaded:")
 		for host := range hosts {
@@ -291,7 +297,9 @@ func main() {
 		}
 	}
 
-	// Run DNS server instances with goroutine
+	// Run DNS server ----------------------------------------------------------- //
+
+	// Add goroutines for DNS instances running
 	wg.Add(2)
 
 	// Run DNS server for UDP requests
@@ -327,7 +335,7 @@ func main() {
 		}
 	}()
 
-	// Запуск сервера для метрик Prometheus
+	// Run Prometheus metrics server
 	if config.MetricsEnabled {
 		wg.Add(1)
 		go func() {
@@ -339,6 +347,8 @@ func main() {
 			}
 		}()
 	}
+
+	// Exit on Ctrl+C or SIGTERM ------------------------------------------------ //
 
 	// Handle interrupt signals
 	// Thx: https://www.developer.com/languages/os-signals-go/
@@ -352,12 +362,11 @@ func main() {
 			SigtermHandler(s)
 		}
 	}()
-
 	exitcode := <-exitchnl
 
-	// Waiting for all goroutines to complete
+	// End of program ----------------------------------------------------------- //
+
+	// Waiting for all goroutines to complete and ensure exit
 	wg.Wait()
-
 	os.Exit(exitcode)
-
 }
