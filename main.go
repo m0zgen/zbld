@@ -13,9 +13,11 @@ import (
 	"os"
 	"os/signal"
 	"regexp"
+	"strconv"
 	"strings"
 	"sync"
 	"syscall"
+	"text/template"
 	"time"
 	"zdns/internal/config"
 	"zdns/internal/lists"
@@ -198,6 +200,128 @@ func SigtermHandler(signal os.Signal) {
 	}
 }
 
+// TEST FUNCTIONS ------------------------------------------------------------- //
+type UserConfig struct {
+	DNSPort       int
+	MetricsPort   int
+	LogFile       string
+	ConfigVersion string
+	UserName      string
+}
+
+// extractNumber извлекает цифры из строки и возвращает их в виде int
+func extractNumber(s string) (int, error) {
+	// Ищем последовательность цифр в конце строки
+	lastDigitIndex := len(s)
+	for i := len(s) - 1; i >= 0; i-- {
+		if !isDigit(s[i]) {
+			break
+		}
+		lastDigitIndex = i
+	}
+
+	// Извлекаем цифры и преобразуем их в int
+	number, err := strconv.Atoi(s[lastDigitIndex:])
+	if err != nil {
+		return 0, err
+	}
+
+	return number, nil
+}
+
+// isDigit возвращает true, если символ - цифра
+func isDigit(c byte) bool {
+	return '0' <= c && c <= '9'
+}
+
+// updatePort обновляет порт на основе извлеченной цифры
+func updateNum(basePort, number int) int {
+	// Заменяем последние цифры в basePort на извлеченное число
+	portStr := strconv.Itoa(basePort)
+	updatedPortStr := portStr[:len(portStr)-len(strconv.Itoa(number))] + strconv.Itoa(number)
+	updatedPort, _ := strconv.Atoi(updatedPortStr)
+	return updatedPort
+}
+
+func applyNewConfig(newFilename string, tmpl *template.Template, newUserConfig UserConfig) {
+	// Создание нового файла для записи
+	file, err := os.Create(newFilename)
+	if err != nil {
+		fmt.Println("Error creating file:", err)
+		return
+	}
+	defer file.Close()
+
+	// Применение шаблона и запись в файл
+	err = tmpl.Execute(file, newUserConfig)
+	if err != nil {
+		fmt.Println("Error applying template:", err)
+		return
+	}
+
+	fmt.Println("Template applied and saved to", newFilename)
+}
+
+func generateUserConfig(username string) {
+
+	// Path to template file
+	templatePath := "addits/templates/user-config-template.yml"
+	// New config filename
+	newFilename := "new_config_" + username + ".yml"
+
+	// Extract number from username
+	number, err := extractNumber(username)
+	if err != nil {
+		fmt.Println("Error extracting number:", err)
+		return
+	}
+
+	// Update default ports and user index
+	updatedDNSPort := updateNum(50000, number)
+	updateMetricsPort := updateNum(40000, number)
+	updateUserIndex := updateNum(0000, number)
+
+	// Apply new config for new user with updated data
+	newUserConfig := UserConfig{
+		UserName:      username,
+		DNSPort:       updatedDNSPort,
+		MetricsPort:   updateMetricsPort,
+		LogFile:       "users/logs/user" + strconv.Itoa(updateUserIndex) + ".log",
+		ConfigVersion: "user" + strconv.Itoa(updateUserIndex) + "-config",
+	}
+
+	// Read template file
+	templateContent, err := os.ReadFile(templatePath)
+	if err != nil {
+		return
+	}
+
+	// Read and parse template file
+	tmpl, err := template.New(newFilename).Parse(string(templateContent))
+	//log.Println(tmpl)
+	if err != nil {
+		fmt.Println("Error parsing template:", err)
+		return
+	}
+
+	// Apply
+	//applyTemplate := func(user UserConfig) {
+	//	err := tmpl.Execute(os.Stdout, user)
+	//	if err != nil {
+	//		fmt.Println("Error applying template:", err)
+	//		return
+	//	}
+	//	fmt.Println()
+	//}
+
+	//applyTemplate(newUserConfig)
+	applyNewConfig(newFilename, tmpl, newUserConfig)
+
+	os.Exit(0)
+}
+
+// ---------------------------------------------------------------------------- //
+
 // main - Main function. Init config, load hosts, run DNS server
 func main() {
 
@@ -207,10 +331,16 @@ func main() {
 	var wg = new(sync.WaitGroup)
 
 	// Parse command line arguments
+	addUserFlag := flag.String("adduser", "", "Username for configuration")
+	// Another flags
 	flag.StringVar(&configFile, "config", "config.yml", "Config file path")
 	flag.StringVar(&hostsFile, "hosts", "hosts.txt", "Hosts file path")
 	flag.StringVar(&permanentFile, "permanent", "hosts-permanent.txt", "Permanent hosts file path")
 	flag.Parse()
+
+	if *addUserFlag != "" {
+		generateUserConfig(*addUserFlag)
+	}
 
 	// Load config and pass params to vars -------------------------------------- //
 
