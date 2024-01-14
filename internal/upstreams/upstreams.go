@@ -9,12 +9,16 @@ import (
 	prom "zdns/internal/prometheus"
 )
 
-// Config structure for storing configuration parameters
+// Variables --------------------------------------------------------------- //
+
+// CurrentIndex - Selected upstream server index
 var CurrentIndex = 0
 
-// Functions for internal use
+// Functions for internal use ---------------------------------------------- //
+
 // Check if upstream DNS server is available
 func isUpstreamServerAvailable(upstreamAddr string, timeout time.Duration) bool {
+
 	conn, err := net.DialTimeout("udp", upstreamAddr, timeout)
 	if err != nil {
 		return false
@@ -32,12 +36,12 @@ func isUpstreamServerAvailable(upstreamAddr string, timeout time.Duration) bool 
 // Strict upstream balancing policy
 func getNextUpstreamServer(upstreams []string) string {
 
-	// Проверить доступность первого сервера
+	// Check if first upstream server is available
 	if isUpstreamServerAvailable(upstreams[0], 2*time.Second) {
 		return upstreams[0]
 	}
 
-	// Если первый сервер недоступен, вернуть второй
+	// If first upstream server is not available, return second one
 	return upstreams[1]
 }
 
@@ -45,12 +49,12 @@ func getNextUpstreamServer(upstreams []string) string {
 func getRobinUpstreamServer(upstreams []string) string {
 	//mu.Lock()
 	//defer mu.Unlock()
-	// Простой round-robin: выбираем следующий сервер
+	// Simple round-robin: select next server
 	CurrentIndex = (CurrentIndex + 1) % len(upstreams)
 	return upstreams[CurrentIndex]
 }
 
-// Functions for external use
+// Functions for external usage ---------------------------------------------- //
 
 // ReturnZeroIP - Return zero IP address for blocked domains
 func ReturnZeroIP(m *dns.Msg, clientIP net.IP, host string) {
@@ -166,21 +170,21 @@ func ResolveBothWithUpstream(host string, clientIP net.IP, upstreamAddr string, 
 	//	ipv6 = net.ParseIP(config.DefaultIPAddress)
 	//}
 
-	// Вернуть nil для ipv6, если AAAA запись отсутствует
+	// Return nil for ipv6, if AAAA record is not found
 	if ipv6.Equal(net.ParseIP("::ffff:0.0.0.0")) {
 		ipv6 = nil
 	}
 
 	if ipv4 != nil && !ipv6.Equal(net.ParseIP("::ffff:0.0.0.0")) {
-		// Домен имеет запись A (IPv4), но не имеет записи AAAA (IPv6)
+		// Domain has A (IPv4), but does not have AAAA (IPv6)
 		log.Printf("Domain %s has A address %s\n", host, ipv4.String())
 	} else {
-		// Домен либо не имеет записи A (IPv4), либо имеет запись AAAA (IPv6)
+		// The domain either does not have an A record (IPv4) or has an AAAA record (IPv6)
 		log.Printf("Domain %s does not have A address\n", host)
 	}
 
+	// Update cache if enabled
 	if cacheEnabled {
-		// Обновление кэша
 		cache.GlobalCache.RLock()
 		cache.GlobalCache.Store[host] = cache.CacheEntry{IPv4: ipv4, IPv6: ipv6}
 		entry := cache.GlobalCache.Store[host]
