@@ -20,7 +20,10 @@ var useRemoteHosts bool
 var hostsFileURL []string
 var isDebug bool
 
-// Функция, которая принимает config.Config
+// Config setter -------------------------------------------------------- //
+
+// SetConfig - Accept config.Config from external package
+// and set configuration parameters to local variables
 func SetConfig(cfg *configuration.Config) {
 	// Используйте cfg по необходимости
 	useLocalHosts = cfg.UseLocalHosts
@@ -30,7 +33,9 @@ func SetConfig(cfg *configuration.Config) {
 	// ...
 }
 
-// Check if host matches regex pattern
+// Regex operations ------------------------------------------------------ //
+
+// IsMatching - Check if host is matching regex pattern
 func IsMatching(host string, regexMap map[string]*regexp.Regexp) bool {
 	for pattern, regex := range regexMap {
 		if regex.MatchString(host) {
@@ -41,14 +46,17 @@ func IsMatching(host string, regexMap map[string]*regexp.Regexp) bool {
 	return false
 }
 
-// Load hosts from file (domain rules)
+// Load operations ------------------------------------------------------- //
+
+// loadHosts - Load hosts from file and bind maps
 func loadHosts(filename string, useRemote bool, urls []string, regexMap map[string]*regexp.Regexp, targetMap map[string]bool) error {
 
 	var downloadedFile = "downloaded_" + filename
 
 	if useLocalHosts {
 		log.Printf("Loading local hosts from %s\n", filename)
-		// Загрузка локальных файлов
+
+		// load local files
 		//for _, filename := range filenames {
 		file, err := os.Open(filename)
 		if err != nil {
@@ -78,9 +86,9 @@ func loadHosts(filename string, useRemote bool, urls []string, regexMap map[stri
 
 	// Download remote host files
 	if useRemote && !strings.Contains(filename, "permanent") {
-		// Проверить, существует ли файл
+		// Check if file exists
 		if _, err := os.Stat(downloadedFile); err == nil {
-			// Если файл существует, очистить его содержимое
+			// If file exists, clear its contents
 			if err := os.WriteFile(downloadedFile, []byte{}, 0644); err != nil {
 				return err
 			}
@@ -100,8 +108,7 @@ func loadHosts(filename string, useRemote bool, urls []string, regexMap map[stri
 				}
 			}(response.Body)
 
-			// Download to file
-			// Открываем файл в режиме дозаписи (или создаем, если файл не существует)
+			// Open file in append mode (or create if file does not exist)
 			file, err := os.OpenFile(downloadedFile, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
 			if err != nil {
 				return err
@@ -114,7 +121,7 @@ func loadHosts(filename string, useRemote bool, urls []string, regexMap map[stri
 				}
 			}(file)
 
-			// Записать данные из тела ответа в файл
+			// Record data from response body to file
 			_, err = io.Copy(file, response.Body)
 			if err != nil {
 				return err
@@ -143,7 +150,7 @@ func loadHosts(filename string, useRemote bool, urls []string, regexMap map[stri
 	return nil
 }
 
-// Load hosts and find regex from hosts.txt file
+// LoadHostsAndRegex - Load hosts and regex patterns from file
 func loadHostsAndRegex(filename string, regexMap map[string]*regexp.Regexp, targetMap map[string]bool) error {
 	file, err := os.Open(filename)
 	if err != nil {
@@ -164,7 +171,7 @@ func loadHostsAndRegex(filename string, regexMap map[string]*regexp.Regexp, targ
 		entry := scanner.Text()
 
 		if strings.HasPrefix(entry, "/") && strings.HasSuffix(entry, "/") {
-			// Это регулярное выражение, добавим его в regexMap
+			// Regex pattern add it to regexMap
 			regexPattern := entry[1 : len(entry)-1]
 			if isDebug {
 				log.Println("Regex pattern:", regexPattern)
@@ -175,7 +182,7 @@ func loadHostsAndRegex(filename string, regexMap map[string]*regexp.Regexp, targ
 			}
 			regexMap[regexPattern] = regex
 		} else {
-			// Это обычный хост, добавим его в hosts
+			// Regular host entry
 			host := strings.ToLower(entry)
 			targetMap[host] = true
 		}
@@ -189,9 +196,12 @@ func loadHostsAndRegex(filename string, regexMap map[string]*regexp.Regexp, targ
 	return nil
 }
 
+// Interval Callers  ----------------------------------------------------- //
+
+// LoadHostsWithInterval - LoadHosts with interval
 func LoadHostsWithInterval(filename string, interval time.Duration, regexMap map[string]*regexp.Regexp, targetMap map[string]bool) {
 
-	// Горутина для периодической загрузки
+	// Goroutine for periodic lists reload
 	go func() {
 		for {
 			log.Printf("Reloading hosts or URL file... %s\n", filename)
@@ -204,9 +214,10 @@ func LoadHostsWithInterval(filename string, interval time.Duration, regexMap map
 	}()
 }
 
+// LoadRegexWithInterval - LoadHostsAndRegex with interval
 func LoadRegexWithInterval(filename string, interval time.Duration, regexMap map[string]*regexp.Regexp, targetMap map[string]bool) {
 
-	// Горутина для периодической загрузки
+	// Goroutine for periodic lists reload
 	go func() {
 		for {
 			log.Printf("Loading regex %s\n", filename)
