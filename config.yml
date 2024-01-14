@@ -38,8 +38,8 @@ permanent_dns_servers:
 # Config version
 config_version: "0.1.8"
 # Users management
-user_hosts_template: "user-hosts.txt"
-user_hosts_permanent_template: "user-hosts-permanent.txt"
-user_config_template: "user-config.yml"
+user_hosts_template: "addits/templates/user-hosts.txt"
+user_hosts_permanent_template: "addits/templates/user-hosts-permanent.txt"
+user_config_template: "addits/templates/user-config.yml"
 users_dir: "users"
 users_log_dir: "users/logs"

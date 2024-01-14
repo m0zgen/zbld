@@ -221,15 +221,17 @@ func main() {
 	flag.StringVar(&permanentFile, "permanent", "hosts-permanent.txt", "Permanent hosts file path")
 	flag.Parse()
 
-	if *addUserFlag != "" {
-		user.GenerateUserConfig(*addUserFlag)
-	}
-
 	// Load config and pass params to vars -------------------------------------- //
 
 	// Load config file
 	if err := configuration.LoadConfig(configFile, &config); err != nil {
 		log.Fatalf("Error loading config file: %v", err)
+	}
+
+	// Add user if -adduser argument is passed
+	if *addUserFlag != "" {
+		user.SetConfig(&config)
+		user.GenerateUserConfig(*addUserFlag)
 	}
 
 	// Parse hosts reload interval
