@@ -215,6 +215,7 @@ func main() {
 
 	// Parse command line arguments
 	addUserFlag := flag.String("adduser", "", "Username for configuration")
+	delUserFlag := flag.String("deluser", "", "Username for deletion")
 	// Another flags
 	flag.StringVar(&configFile, "config", "config.yml", "Config file path")
 	flag.StringVar(&hostsFile, "hosts", "hosts.txt", "Hosts file path")
@@ -229,9 +230,15 @@ func main() {
 	}
 
 	// Add user if -adduser argument is passed
-	if *addUserFlag != "" {
+	if *addUserFlag != "" && *delUserFlag == "" {
 		user.SetConfig(&config)
 		user.GenerateUserConfig(*addUserFlag)
+	}
+
+	// Delete user if -deluser argument is passed
+	if *delUserFlag != "" && *addUserFlag == "" {
+		user.SetConfig(&config)
+		user.DeleteTargetUser(*delUserFlag)
 	}
 
 	// Parse hosts reload interval
