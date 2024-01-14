@@ -30,7 +30,7 @@ type Config struct {
 	DNSforWhitelisted    []string `yaml:"permanent_dns_servers"`
 }
 
-// LoadConfig load configuration from file
+// LoadConfig - Load configuration from file
 func LoadConfig(filename string, cfg *Config) error {
 	file, err := os.ReadFile(filename)
 	if err != nil {
