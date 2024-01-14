@@ -62,7 +62,7 @@ dig A facebook.com @127.0.0.1 -p 5001
 ## Specified config file
 
 ```shell
-go run main.go -config=users/user1-config.yml -hosts=users/user1-hosts.txt
+go run main.go -config=users/config.yml -hosts=users/hosts.txt
 ```
 
 ## Configuration
