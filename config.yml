@@ -27,8 +27,6 @@ cache_ttl_seconds: 3600
 # Metrics enabled
 metrics_enabled: true
 metrics_port: 4001
-# Config version
-config_version: "0.1.7"
 is_debug: false
 # Extra options
 permanent_enabled: true
@@ -37,3 +35,5 @@ permanent_whitelisted: "hosts-permanent.txt"
 permanent_dns_servers:
   - "95.85.95.85:53"
   - "2.56.220.2:53"
+# Config version
+config_version: "0.1.8"
