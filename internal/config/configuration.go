@@ -28,6 +28,11 @@ type Config struct {
 	PermanentEnabled     bool     `yaml:"permanent_enabled"`
 	PermanentWhitelisted string   `yaml:"permanent_whitelisted"`
 	DNSforWhitelisted    []string `yaml:"permanent_dns_servers"`
+	UserHostsTemplate    string   `yaml:"user_hosts_template"`
+	UserHostsPermTmpl    string   `yaml:"user_hosts_permanent_template"`
+	UserConfigTemplate   string   `yaml:"user_config_template"`
+	UsersDir             string   `yaml:"users_dir"`
+	UsersLogDir          string   `yaml:"users_log_dir"`
 }
 
 // LoadConfig - Load configuration from file
