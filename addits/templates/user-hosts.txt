@@ -1,0 +1,8 @@
+# [ Regex rules ] #
+/(^|^.*\.)google.(com|net)$/
+
+# [ Domain rules ] #
+kaspi.kz
+
+# If add // allow all
+# //
