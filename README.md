@@ -59,12 +59,6 @@ Try another domain:
 dig A facebook.com @127.0.0.1 -p 5001
 ```
 
-## Specified config file
-
-```shell
-go run main.go -config=users/user1-config.yml -hosts=users/user1-hosts.txt
-```
-
 ## Configuration
 
 Example:
@@ -112,6 +106,35 @@ permanent_dns_servers:
 ```
 
 **Note**
-
-Permanent option is autonomous function and not compatible with `inverse` option. 
+Permanent option is autonomous function with ignored `inverse` option. 
 Domains from `hosts-permanent.txt` will always be resolved to real IP address from `permanent_dns_servers`.
+
+## Specified config file
+
+You can setup individual settings for different users, example:
+
+```text
+⋊> ~/S/zdns on dev  tree users/                                                                                                          9045 ms  dev 
+users/
+├── logs
+│   └── user1.log
+├── user1
+│   ├── config.yml
+│   ├── hosts-permanent.txt
+│   └── hosts.txt
+└── user2
+    ├── config.yml
+    ├── hosts-permanent.txt
+    └── hosts.txt
+```
+
+Then setup individual settings (like as ports or metrics) in config file for each user, then run `zdns` with `-config`,
+`-hosts`, `-permanent` options, for user1:
+
+```shell
+./zdns -config=users/user1/config.yml -hosts=users/user1/hosts.txt -permanent=users/user1/hosts-permanent.txt
+```
+for user2:
+```shell
+./zdns -config=users/user2/config.yml -hosts=users/user2/hosts.txt -permanent=users/user2/hosts-permanent.txt
+```

@@ -1,0 +1,8 @@
+# [ Regex rules ] #
+/(^|^.*\.)yahoo.(com)$/
+/(^|^.*\.)openbld.(net)$/
+/(^|^.*\.)sys-adm.(in)$/
+/(^|^.*\.)sysconf.(in)$/
+
+# [ Domain rules ] #
+bitbucket.org

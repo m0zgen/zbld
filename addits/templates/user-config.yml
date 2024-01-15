@@ -1,0 +1,34 @@
+# user-config-template.yml for user - {{.UserName}}
+upstream_dns_servers:
+  - "1.1.1.1:53"
+  - "8.8.8.8:53"
+# Load balancing strategies robin, strict. Default is robin
+load_balancing_strategy: "robin"
+use_local_hosts: true
+use_remote_hosts: false
+hosts_file_url:
+  - ""
+reload_interval_duration: 1h
+default_ip_address: "0.0.0.0"
+enable_logging: true
+# If enable_cache is set to true, then the results of DNS queries will be cached
+cache_enabled: true
+# Stale cache entries will be removed after this many seconds
+cache_ttl_seconds: 3600
+# Metrice enabled
+metrics_enabled: true
+is_debug: false
+# Extra options
+permanent_enabled: true
+# Upstream DNS servers for permanent whitelisted domains
+permanent_dns_servers:
+  - "95.85.95.85:53"
+  - "2.56.220.2:53"
+# Individual parameters for each user
+dns_port: {{.DNSPort}}
+metrics_port: {{.MetricsPort}}
+log_file: "{{.LogFile}}"
+config_version: "{{.ConfigVersion}}"
+user_name: "{{.UserName}}"
+user_alias: "{{.UserAlias}}"
+inverse: true

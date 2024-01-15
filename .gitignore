@@ -8,7 +8,5 @@ tools
 zdns
 # Tests
 users
-user*
-config2.yml
-hosts2.txt
+new_*
 download*
