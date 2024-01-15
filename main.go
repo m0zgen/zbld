@@ -21,7 +21,7 @@ import (
 	"zdns/internal/lists"
 	"zdns/internal/prometheus"
 	"zdns/internal/upstreams"
-	"zdns/internal/user"
+	"zdns/internal/usermgmt"
 )
 
 // Global Variables ----------------------------------------------------------- //
@@ -232,16 +232,16 @@ func main() {
 
 	// User operations ---------------------------------------------------------- //
 
-	// Add user if -adduser argument is passed
+	// Add users if -adduser argument is passed
 	if *addUserFlag != "" && *delUserFlag == "" {
-		user.SetConfig(&config)
-		user.GenerateUserConfig(*addUserFlag, *forceFlag)
+		users.SetConfig(&config)
+		users.GenerateUserConfig(*addUserFlag, *forceFlag)
 	}
 
-	// Delete user if -deluser argument is passed
+	// Delete users if -deluser argument is passed
 	if *delUserFlag != "" && *addUserFlag == "" {
-		user.SetConfig(&config)
-		user.DeleteTargetUser(*delUserFlag, *forceFlag)
+		users.SetConfig(&config)
+		users.DeleteTargetUser(*delUserFlag, *forceFlag)
 	}
 
 	// Load hosts --------------------------------------------------------------- //
