@@ -216,6 +216,7 @@ func main() {
 	// Parse command line arguments
 	addUserFlag := flag.String("adduser", "", "Username for configuration")
 	delUserFlag := flag.String("deluser", "", "Username for deletion")
+	forceFlag := flag.Bool("force", false, "Force operations")
 	// Another flags
 	flag.StringVar(&configFile, "config", "config.yml", "Config file path")
 	flag.StringVar(&hostsFile, "hosts", "hosts.txt", "Hosts file path")
@@ -229,17 +230,21 @@ func main() {
 		log.Fatalf("Error loading config file: %v", err)
 	}
 
+	// User operations ---------------------------------------------------------- //
+
 	// Add user if -adduser argument is passed
 	if *addUserFlag != "" && *delUserFlag == "" {
 		user.SetConfig(&config)
-		user.GenerateUserConfig(*addUserFlag)
+		user.GenerateUserConfig(*addUserFlag, *forceFlag)
 	}
 
 	// Delete user if -deluser argument is passed
 	if *delUserFlag != "" && *addUserFlag == "" {
 		user.SetConfig(&config)
-		user.DeleteTargetUser(*delUserFlag)
+		user.DeleteTargetUser(*delUserFlag, *forceFlag)
 	}
+
+	// Load hosts --------------------------------------------------------------- //
 
 	// Parse hosts reload interval
 	ReloadInterval, err := time.ParseDuration(config.ReloadInterval)
