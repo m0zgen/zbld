@@ -21,7 +21,7 @@ import (
 	"zdns/internal/lists"
 	"zdns/internal/prometheus"
 	"zdns/internal/upstreams"
-	"zdns/internal/users"
+	"zdns/internal/usermgmt"
 )
 
 // Global Variables ----------------------------------------------------------- //
