@@ -31,4 +31,5 @@ log_file: "{{.LogFile}}"
 config_version: "{{.ConfigVersion}}"
 user_name: "{{.UserName}}"
 user_alias: "{{.UserAlias}}"
+user_comment: "{{.UserComment}}"
 inverse: true

@@ -23,6 +23,7 @@ type UsrConfig struct {
 	ConfigVersion string
 	UserName      string
 	UserAlias     string
+	UserComment   string
 }
 
 // Config variables ----------------------------------------------------- //
@@ -326,7 +327,7 @@ func applyNewConfig(newFilename string, tmpl *template.Template, newUserConfig U
 }
 
 // newUserConfig - Create new user struct config with updated data
-func structUsrConfig(username, useralias string, dnsPort, metricsPort, updateUserIndex int) (UsrConfig, error) {
+func structUsrConfig(username, useralias string, dnsPort, metricsPort, updateUserIndex int, userComment string) (UsrConfig, error) {
 
 	config := UsrConfig{
 		UserName:      username,
@@ -335,6 +336,7 @@ func structUsrConfig(username, useralias string, dnsPort, metricsPort, updateUse
 		MetricsPort:   metricsPort,
 		LogFile:       fmt.Sprintf("users/logs/user%d.log", updateUserIndex),
 		ConfigVersion: fmt.Sprintf("user%d-config", updateUserIndex),
+		UserComment:   userComment,
 	}
 
 	return config, nil
@@ -373,8 +375,7 @@ func DeleteTargetUser(username string, force bool) {
 // GenerateUserConfig - Generate user config external function
 func GenerateUserConfig(usernameWithAlias string, force bool) {
 	var err error
-	var username string
-	username = extractAlias(usernameWithAlias, false)
+	username := extractAlias(usernameWithAlias, false)
 	useralias := extractAlias(usernameWithAlias, true)
 
 	if !isDirExists(usersDir) {
@@ -412,7 +413,6 @@ func GenerateUserConfig(usernameWithAlias string, force bool) {
 
 	// Is username does not have digit,add digit in to username
 	if !isDigit(username[len(username)-1]) {
-		useralias = useralias + "_previous_name_passed_" + username
 		// Scan users folder and set new username with next user number
 		username, err = getNextUserName(usersDir, "user")
 		if err != nil {
@@ -424,18 +424,18 @@ func GenerateUserConfig(usernameWithAlias string, force bool) {
 		log.Println("User is Numbered")
 		// If username not contains "user" set default name
 		if username[:4] != "user" {
-			previousUsername := username
 			username, err = getNextUserName(usersDir, "user")
 			if err != nil {
 				log.Println("Error:", err)
 				os.Exit(1)
 			}
-			useralias = useralias + "_previous_name_passed_" + previousUsername
 
 		} else {
 			username = extractAlias(usernameWithAlias, false)
 		}
 	}
+
+	userComment := "passed_alias-" + useralias + "_passed_name-" + username
 
 	// Path to template file
 	templatePath := userConfigTemplate
@@ -465,7 +465,7 @@ func GenerateUserConfig(usernameWithAlias string, force bool) {
 	//	LogFile:       "users/logs/user" + strconv.Itoa(updateUserIndex) + ".log",
 	//	ConfigVersion: "user" + strconv.Itoa(updateUserIndex) + "-config",
 	//}
-	newUserConfig, err := structUsrConfig(username, useralias, updatedDNSPort, updateMetricsPort, updateUserIndex)
+	newUserConfig, err := structUsrConfig(username, useralias, updatedDNSPort, updateMetricsPort, updateUserIndex, userComment)
 	if err != nil {
 		fmt.Println("Error:", err)
 		//return
