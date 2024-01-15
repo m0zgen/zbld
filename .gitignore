@@ -6,6 +6,7 @@ zdns.log
 tools/builds/prev
 tools
 zdns
+!internal/users
 # Tests
 users
 new_*
