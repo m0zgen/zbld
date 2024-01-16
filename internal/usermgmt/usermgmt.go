@@ -477,7 +477,8 @@ func GenerateUserConfig(usernameWithAlias string, force bool) {
 	templateContent, err := os.ReadFile(templatePath)
 	if err != nil {
 		log.Println("Error reading template file:", err)
-		return
+		//return
+		os.Exit(1)
 	}
 
 	// Read and parse template file
@@ -485,7 +486,8 @@ func GenerateUserConfig(usernameWithAlias string, force bool) {
 	//log.Println(tmpl)
 	if err != nil {
 		log.Println("Error parsing template:", err)
-		return
+		//return
+		os.Exit(1)
 	}
 
 	generateUserCatalog(username, force)
