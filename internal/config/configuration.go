@@ -33,6 +33,7 @@ type Config struct {
 	UserConfigTemplate   string   `yaml:"user_config_template"`
 	UsersDir             string   `yaml:"users_dir"`
 	UsersLogDir          string   `yaml:"users_log_dir"`
+	AllowedQtypes        []string `yaml:"allowed_qtypes"`
 }
 
 // LoadConfig - Load configuration from file

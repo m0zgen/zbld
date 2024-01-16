@@ -12,6 +12,7 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"reflect"
 	"regexp"
 	"strings"
 	"sync"
@@ -20,6 +21,7 @@ import (
 	"zdns/internal/config"
 	"zdns/internal/lists"
 	"zdns/internal/prometheus"
+	"zdns/internal/queries"
 	"zdns/internal/upstreams"
 	"zdns/internal/usermgmt"
 )
@@ -84,52 +86,119 @@ func setResponseCode(m *dns.Msg, responseCode int) {
 	}
 }
 
+// isAllowedQtype - Check if Qtype is allowed for DNS processing
+func isAllowedQtype(qtype uint16, allowedQtypes []string) bool {
+	// Преобразование числового значения Qtype в строку
+	qtypeStr := dns.TypeToString[qtype]
+
+	// Проверка, содержится ли строка Qtype в списке разрешенных
+	for _, allowedQtype := range allowedQtypes {
+		if qtypeStr == allowedQtype {
+			return true
+		}
+	}
+
+	return false
+}
+
+// createAnswerForAllowedQtype - Create DNS response for allowed Qtype
+func createAnswerForAllowedQtype(question dns.Question) dns.RR {
+	qtypeName := dns.TypeToString[question.Qtype]
+
+	// Получаем тип DNS записи по имени
+	qtype := dns.StringToType[qtypeName]
+	if qtype == 0 {
+		// Неизвестный Qtype, возвращаем nil или обрабатываем ошибку
+		return nil
+	}
+
+	// Получаем конструктор для создания экземпляра объекта Qtype
+	qtypeConstructor := reflect.New(reflect.TypeOf(dns.TypeToString[qtype])).Elem()
+
+	if qtypeConstructor.IsValid() {
+		log.Println("qtypeConstructor is valid" + qtypeConstructor.String())
+	}
+
+	// Пример: если qtypeConstructor - это *dns.A
+	if qtype == dns.TypeA {
+		// Создаем объект типа *dns.A и возвращаем его
+		return &dns.A{
+			Hdr: dns.RR_Header{
+				Name:   question.Name,
+				Rrtype: dns.TypeA,
+				Class:  dns.ClassINET,
+				Ttl:    3600, // Например, TTL 1 час
+			},
+			A: net.ParseIP("192.168.1.1"), // Пример IP-адреса
+		}
+	}
+	return nil
+}
+
 // getQTypeResponse - Get DNS response for A or AAAA query type
 func getQTypeResponse(m *dns.Msg, question dns.Question, host string, clientIP net.IP, upstreamAd string) {
 	// Resolve using upstream DNS for names not in hosts.txt
 	//log.Println("Resolving with upstream DNS for:", clientIP, _host)
 	ipv4, ipv6, resp := upstreams.ResolveBothWithUpstream(host, clientIP, upstreamAd, config.CacheEnabled, config.CacheTTLSeconds)
 
-	// IPv4
-	if ipv4 != nil {
-		if question.Qtype == dns.TypeA {
-			answerIPv4 := dns.A{
-				Hdr: dns.RR_Header{
-					Name:   host,
-					Rrtype: dns.TypeA,
-					Class:  dns.ClassINET,
-					Ttl:    0,
-				},
-				A: ipv4,
+	if isAllowedQtype(question.Qtype, config.AllowedQtypes) {
+		// Process allowed Qtypes
+		if ipv4 != nil {
+			answer := queries.GetAnswer(ipv4, host, question)
+			if answer != nil {
+				m.Answer = append(m.Answer, answer)
+				log.Println("Answer v4:", answer)
+			} else {
+				setResponseCode(m, resp.MsgHdr.Rcode)
 			}
-			m.Answer = append(m.Answer, &answerIPv4)
-			log.Println("Answer v4:", answerIPv4)
-			prom.SuccessfulResolutionsTotal.Inc()
+
+			//if question.Qtype == dns.TypeA {
+			//	answerIPv4 := dns.A{
+			//		Hdr: dns.RR_Header{
+			//			Name:   host,
+			//			Rrtype: dns.TypeA,
+			//			Class:  dns.ClassINET,
+			//			Ttl:    0,
+			//		},
+			//		A: ipv4,
+			//	}
+			//	m.Answer = append(m.Answer, &answerIPv4)
+			//	log.Println("Answer v4:", answerIPv4)
+			//	prom.SuccessfulResolutionsTotal.Inc()
+			//}
+		} else {
+			// If IPv4 address is not available, set response code to code from MsgHdr.Rcode
+			//log.Println("MsgHdr.Rcode from resp:", resp.MsgHdr.Rcode)
+			setResponseCode(m, resp.MsgHdr.Rcode)
+		}
+
+		// IPv6
+		if ipv6 != nil {
+			if question.Qtype == dns.TypeAAAA {
+				if ipv6 != nil {
+					answerIPv6 := dns.AAAA{
+						Hdr: dns.RR_Header{
+							Name:   host,
+							Rrtype: dns.TypeAAAA,
+							Class:  dns.ClassINET,
+							Ttl:    0,
+						},
+						AAAA: ipv6,
+					}
+					m.Answer = append(m.Answer, &answerIPv6)
+					log.Println("Answer v6:", answerIPv6)
+					prom.SuccessfulResolutionsTotal.Inc()
+				}
+			}
+		} else {
+			// If IPv6 address is not available, set response code to code from MsgHdr.Rcode
+			//log.Println("MsgHdr.Rcode from resp:", resp.MsgHdr.Rcode)
+			setResponseCode(m, resp.MsgHdr.Rcode)
 		}
 	} else {
-		// Если IPv4 адреса нет, устанавливаем код ошибки в NXDOMAIN
-		//m.SetRcode(m, dns.RcodeNameError)
-		log.Println("MsgHdr.Rcode from resp:", resp.MsgHdr.Rcode)
-		setResponseCode(m, resp.MsgHdr.Rcode)
-
-	}
-
-	// IPv6
-	if question.Qtype == dns.TypeAAAA {
-		if ipv6 != nil {
-			answerIPv6 := dns.AAAA{
-				Hdr: dns.RR_Header{
-					Name:   host,
-					Rrtype: dns.TypeAAAA,
-					Class:  dns.ClassINET,
-					Ttl:    0,
-				},
-				AAAA: ipv6,
-			}
-			m.Answer = append(m.Answer, &answerIPv6)
-			log.Println("Answer v6:", answerIPv6)
-			prom.SuccessfulResolutionsTotal.Inc()
-		}
+		// Обработка неразрешенного Qtype
+		log.Println("Qtype is not allowed:", question.Qtype)
+		setResponseCode(m, 5)
 	}
 
 	if config.IsDebug {

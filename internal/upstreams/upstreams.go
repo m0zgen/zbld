@@ -173,39 +173,24 @@ func ResolveBothWithUpstream(host string, clientIP net.IP, upstreamAddr string, 
 		ipv6 = nil
 	}
 
-	nxdomainMsg := new(dns.Msg)
-
 	if ipv4 != nil && ipv6 != nil {
-
 		// Domain has A (IPv4), but does not have AAAA (IPv6)
 		log.Printf("Domain %s has A address %s\n", host, ipv4.String())
-		nxdomainMsg.SetRcode(msgIPv4, dns.RcodeSuccess)
-
 	} else {
 		// The domain either does not have an A record (IPv4) or has an AAAA record (IPv6)
 		log.Printf("Domain %s does not have A address\n", host)
-		// Create an empty response with rcode 3 (NXDOMAIN)
-		//if dns.R
-		nxdomainMsg.SetRcode(msgIPv4, dns.RcodeNameError)
-		log.Println("MsgHdr.Rcode:", nxdomainMsg.MsgHdr.Rcode)
-
-		rCode := nxdomainMsg.MsgHdr.Rcode
-		log.Println("MsgHdr.Rcode-new:", rCode)
-
-		// Print the response (in real implementation, you would send this response to the DNS client)
-		//log.Printf("Response: %v\n", nxdomainMsg)
-
+		//rCode := respIPv4.MsgHdr.Rcode
 	}
 
 	// Update cache if enabled
 	if cacheEnabled {
 		cache.GlobalCache.RLock()
-		cache.GlobalCache.Store[host] = cache.CacheEntry{IPv4: ipv4, IPv6: ipv6, DnsMsg: nxdomainMsg}
+		cache.GlobalCache.Store[host] = cache.CacheEntry{IPv4: ipv4, IPv6: ipv6, DnsMsg: respIPv4}
 		entry := cache.GlobalCache.Store[host]
 		entry.UpdateCreationTimeWithTTL(time.Duration(cacheTTLSeconds) * time.Second)
 		cache.GlobalCache.Store[host] = entry
 		cache.GlobalCache.RUnlock()
 	}
 
-	return ipv4, ipv6, nxdomainMsg
+	return ipv4, ipv6, respIPv4
 }
