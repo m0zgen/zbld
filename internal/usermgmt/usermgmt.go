@@ -161,7 +161,7 @@ func generateUserCatalog(username string, force bool) {
 		log.Println("Error copying file:", err)
 		return
 	}
-	err = copyFile(userHostsPermTmpl, userSpaceDir+"/"+"hosts_permanent.txt")
+	err = copyFile(userHostsPermTmpl, userSpaceDir+"/"+"hosts-permanent.txt")
 	if err != nil {
 		log.Println("Error copying file:", err)
 		return

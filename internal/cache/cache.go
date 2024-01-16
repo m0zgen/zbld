@@ -2,6 +2,7 @@
 package cache
 
 import (
+	"github.com/miekg/dns"
 	"net"
 	"sync"
 	"time"
@@ -13,6 +14,7 @@ type CacheEntry struct {
 	IPv6         net.IP
 	CreationTime time.Time
 	TTL          time.Duration
+	DnsMsg       *dns.Msg
 }
 
 // Cache - Structure for storing cache entries

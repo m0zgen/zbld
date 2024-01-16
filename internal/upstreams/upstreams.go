@@ -94,7 +94,7 @@ func GetUpstreamServer(upstreams []string, balancingPolicy string) string {
 }
 
 // ResolveBothWithUpstream - Resolve both IPv4 and IPv6 addresses using upstream DNS with selected balancing strategy
-func ResolveBothWithUpstream(host string, clientIP net.IP, upstreamAddr string, cacheEnabled bool, cacheTTLSeconds int) (net.IP, net.IP) {
+func ResolveBothWithUpstream(host string, clientIP net.IP, upstreamAddr string, cacheEnabled bool, cacheTTLSeconds int) (net.IP, net.IP, *dns.Msg) {
 
 	if cacheEnabled {
 		//log.Println("Cache enabled")
@@ -107,7 +107,7 @@ func ResolveBothWithUpstream(host string, clientIP net.IP, upstreamAddr string, 
 			prom.CacheHitResponseTotal.Inc()
 			// Check and delete expired TTL entries from cache
 			defer cache.CheckAndDeleteExpiredEntries()
-			return entry.IPv4, entry.IPv6
+			return entry.IPv4, entry.IPv6, entry.DnsMsg
 		}
 	}
 
@@ -139,25 +139,23 @@ func ResolveBothWithUpstream(host string, clientIP net.IP, upstreamAddr string, 
 		}
 
 		//}
+	}
 
-		// Resolve IPv6
-		msgIPv6 := &dns.Msg{}
-		msgIPv6.SetQuestion(dns.Fqdn(host), dns.TypeAAAA)
+	// Resolve IPv6
+	msgIPv6 := &dns.Msg{}
+	msgIPv6.SetQuestion(dns.Fqdn(host), dns.TypeAAAA)
+	log.Println("Resolving with upstream DNS for IPv6:", upstreamAddr, clientIP, host)
 
-		log.Println("Resolving with upstream DNS for IPv6:", upstreamAddr, clientIP, host)
-
-		respIPv6, _, err := client.Exchange(msgIPv6, upstreamAddr)
-
-		if err == nil && len(respIPv6.Answer) > 0 {
-			//if aaaa, ok := respIPv6.Answer[0].(*dns.AAAA); ok {
-			//	ipv6 = aaaa.AAAA
-			//	//break
-			//}
-			for _, answer := range respIPv6.Answer {
-				if aaaa, ok := answer.(*dns.AAAA); ok {
-					ipv6 = aaaa.AAAA
-					log.Printf("IPv6 address: %s\n", ipv6)
-				}
+	respIPv6, _, err := client.Exchange(msgIPv6, upstreamAddr)
+	if err == nil && len(respIPv6.Answer) > 0 {
+		//if aaaa, ok := respIPv6.Answer[0].(*dns.AAAA); ok {
+		//	ipv6 = aaaa.AAAA
+		//	//break
+		//}
+		for _, answer := range respIPv6.Answer {
+			if aaaa, ok := answer.(*dns.AAAA); ok {
+				ipv6 = aaaa.AAAA
+				log.Printf("IPv6 address: %s\n", ipv6)
 			}
 		}
 	}
@@ -175,23 +173,39 @@ func ResolveBothWithUpstream(host string, clientIP net.IP, upstreamAddr string, 
 		ipv6 = nil
 	}
 
-	if ipv4 != nil && !ipv6.Equal(net.ParseIP("::ffff:0.0.0.0")) {
+	nxdomainMsg := new(dns.Msg)
+
+	if ipv4 != nil && ipv6 != nil {
+
 		// Domain has A (IPv4), but does not have AAAA (IPv6)
 		log.Printf("Domain %s has A address %s\n", host, ipv4.String())
+		nxdomainMsg.SetRcode(msgIPv4, dns.RcodeSuccess)
+
 	} else {
 		// The domain either does not have an A record (IPv4) or has an AAAA record (IPv6)
 		log.Printf("Domain %s does not have A address\n", host)
+		// Create an empty response with rcode 3 (NXDOMAIN)
+		//if dns.R
+		nxdomainMsg.SetRcode(msgIPv4, dns.RcodeNameError)
+		log.Println("MsgHdr.Rcode:", nxdomainMsg.MsgHdr.Rcode)
+
+		rCode := nxdomainMsg.MsgHdr.Rcode
+		log.Println("MsgHdr.Rcode-new:", rCode)
+
+		// Print the response (in real implementation, you would send this response to the DNS client)
+		//log.Printf("Response: %v\n", nxdomainMsg)
+
 	}
 
 	// Update cache if enabled
 	if cacheEnabled {
 		cache.GlobalCache.RLock()
-		cache.GlobalCache.Store[host] = cache.CacheEntry{IPv4: ipv4, IPv6: ipv6}
+		cache.GlobalCache.Store[host] = cache.CacheEntry{IPv4: ipv4, IPv6: ipv6, DnsMsg: nxdomainMsg}
 		entry := cache.GlobalCache.Store[host]
 		entry.UpdateCreationTimeWithTTL(time.Duration(cacheTTLSeconds) * time.Second)
 		cache.GlobalCache.Store[host] = entry
 		cache.GlobalCache.RUnlock()
 	}
 
-	return ipv4, ipv6
+	return ipv4, ipv6, nxdomainMsg
 }

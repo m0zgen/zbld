@@ -36,26 +36,82 @@ var mu sync.Mutex
 
 // Process DNS queries ------------------------------------------------------- //
 
+// setResponseCode - Set DNS response code
+func setResponseCode(m *dns.Msg, responseCode int) {
+
+	// Case if error code from 1 to 5
+	// 1 - Format error - The name server was unable to interpret the query.
+	// 2 - Server failure - The name server was unable to process this query due to a problem with the name server.
+	// 3 - Name Error - Meaningful only for responses from an authoritative name server, this code signifies that the domain name referenced in the query does not exist.
+	// 4 - Not Implemented - The name server does not support the requested kind of query.
+	// 5 - Refused - The name server refuses to perform the specified operation for policy reasons.  For example, a name server may not wish to provide the information to the particular requester, or a name server may not wish to perform a particular operation (e.g., zone transfer) for particular data.
+
+	// Check if response code is valid
+	if responseCode >= dns.RcodeSuccess && responseCode <= dns.RcodeBadName {
+
+		switch responseCode {
+		case 0:
+			m.SetRcode(m, dns.RcodeSuccess)
+		case 1:
+			m.SetRcode(m, dns.RcodeFormatError)
+		case 2:
+			m.SetRcode(m, dns.RcodeServerFailure)
+		case 3:
+			m.SetRcode(m, dns.RcodeNameError)
+		case 4:
+			m.SetRcode(m, dns.RcodeNotImplemented)
+		case 5:
+			m.SetRcode(m, dns.RcodeRefused)
+		case 6:
+			m.SetRcode(m, dns.RcodeYXDomain)
+		case 7:
+			m.SetRcode(m, dns.RcodeYXRrset)
+		case 8:
+			m.SetRcode(m, dns.RcodeNXRrset)
+		case 9:
+			m.SetRcode(m, dns.RcodeNotAuth)
+		case 10:
+			m.SetRcode(m, dns.RcodeNotZone)
+
+		// Another cases
+		default:
+			m.SetRcode(m, dns.RcodeServerFailure)
+		}
+
+	} else {
+		// If invalid response code is passed, set default error code (SERVFAIL)
+		m.SetRcode(m, dns.RcodeServerFailure)
+	}
+}
+
 // getQTypeResponse - Get DNS response for A or AAAA query type
 func getQTypeResponse(m *dns.Msg, question dns.Question, host string, clientIP net.IP, upstreamAd string) {
 	// Resolve using upstream DNS for names not in hosts.txt
 	//log.Println("Resolving with upstream DNS for:", clientIP, _host)
-	ipv4, ipv6 := upstreams.ResolveBothWithUpstream(host, clientIP, upstreamAd, config.CacheEnabled, config.CacheTTLSeconds)
+	ipv4, ipv6, resp := upstreams.ResolveBothWithUpstream(host, clientIP, upstreamAd, config.CacheEnabled, config.CacheTTLSeconds)
 
 	// IPv4
-	if question.Qtype == dns.TypeA {
-		answerIPv4 := dns.A{
-			Hdr: dns.RR_Header{
-				Name:   host,
-				Rrtype: dns.TypeA,
-				Class:  dns.ClassINET,
-				Ttl:    0,
-			},
-			A: ipv4,
+	if ipv4 != nil {
+		if question.Qtype == dns.TypeA {
+			answerIPv4 := dns.A{
+				Hdr: dns.RR_Header{
+					Name:   host,
+					Rrtype: dns.TypeA,
+					Class:  dns.ClassINET,
+					Ttl:    0,
+				},
+				A: ipv4,
+			}
+			m.Answer = append(m.Answer, &answerIPv4)
+			log.Println("Answer v4:", answerIPv4)
+			prom.SuccessfulResolutionsTotal.Inc()
 		}
-		m.Answer = append(m.Answer, &answerIPv4)
-		log.Println("Answer v4:", answerIPv4)
-		prom.SuccessfulResolutionsTotal.Inc()
+	} else {
+		// Если IPv4 адреса нет, устанавливаем код ошибки в NXDOMAIN
+		//m.SetRcode(m, dns.RcodeNameError)
+		log.Println("MsgHdr.Rcode from resp:", resp.MsgHdr.Rcode)
+		setResponseCode(m, resp.MsgHdr.Rcode)
+
 	}
 
 	// IPv6
@@ -75,6 +131,11 @@ func getQTypeResponse(m *dns.Msg, question dns.Question, host string, clientIP n
 			prom.SuccessfulResolutionsTotal.Inc()
 		}
 	}
+
+	if config.IsDebug {
+		fmt.Println("Response:", resp)
+	}
+
 }
 
 // handleDNSRequest - Handle DNS request from client
