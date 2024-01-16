@@ -1,8 +1,8 @@
 # [ Regex rules ] #
-/(^|^.*\.)google.(com|net)$/
+/(^|^.*\.)example.(com|net)$/
 
 # [ Domain rules ] #
-kaspi.kz
+example.com
 
 # If add // allow all
 # //
