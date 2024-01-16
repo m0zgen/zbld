@@ -142,14 +142,27 @@ func getQTypeResponse(m *dns.Msg, question dns.Question, host string, clientIP n
 	ipv4, ipv6, resp := upstreams.ResolveBothWithUpstream(host, clientIP, upstreamAd, config.CacheEnabled, config.CacheTTLSeconds)
 
 	if isAllowedQtype(question.Qtype, config.AllowedQtypes) {
-		// Process allowed Qtypes
+		// Обработка разрешенного Qtype
+		// Создание ответа, например:
+		log.Println("Creating answer for allowed Qtype:", question.Qtype)
+		//answer := createAnswerForAllowedQtype(question)
+		//m.Answer = append(m.Answer, answer)
+		// IPv4
 		if ipv4 != nil {
-			answer := queries.GetAnswer(ipv4, host, question)
-			if answer != nil {
-				m.Answer = append(m.Answer, answer)
-				log.Println("Answer v4:", answer)
-			} else {
-				setResponseCode(m, resp.MsgHdr.Rcode)
+
+			for addr := range ipv4 {
+				log.Println("IPv4 addr:", ipv4[addr])
+				answer := queries.GetAnswer4(ipv4[addr], host, question)
+				if answer != nil {
+					m.Answer = append(m.Answer, answer)
+					if config.IsDebug {
+						log.Println("Answer v4:", answer)
+					}
+					prom.SuccessfulResolutionsTotal.Inc()
+				} else {
+					setResponseCode(m, resp.MsgHdr.Rcode)
+				}
+
 			}
 
 			//if question.Qtype == dns.TypeA {
@@ -176,18 +189,30 @@ func getQTypeResponse(m *dns.Msg, question dns.Question, host string, clientIP n
 		if ipv6 != nil {
 			if question.Qtype == dns.TypeAAAA {
 				if ipv6 != nil {
-					answerIPv6 := dns.AAAA{
-						Hdr: dns.RR_Header{
-							Name:   host,
-							Rrtype: dns.TypeAAAA,
-							Class:  dns.ClassINET,
-							Ttl:    0,
-						},
-						AAAA: ipv6,
+					for addr := range ipv6 {
+						log.Println("IPv6 addr:", ipv6[addr])
+						answer := queries.GetAnswer6(ipv6[addr], host, question)
+						if answer != nil {
+							m.Answer = append(m.Answer, answer)
+							//log.Println("Answer v4:", answer)
+							prom.SuccessfulResolutionsTotal.Inc()
+						} else {
+							setResponseCode(m, resp.MsgHdr.Rcode)
+						}
+
 					}
-					m.Answer = append(m.Answer, &answerIPv6)
-					log.Println("Answer v6:", answerIPv6)
-					prom.SuccessfulResolutionsTotal.Inc()
+					//answerIPv6 := dns.AAAA{
+					//	Hdr: dns.RR_Header{
+					//		Name:   host,
+					//		Rrtype: dns.TypeAAAA,
+					//		Class:  dns.ClassINET,
+					//		Ttl:    0,
+					//	},
+					//	AAAA: ipv6,
+					//}
+					//m.Answer = append(m.Answer, &answerIPv6)
+					//log.Println("Answer v6:", answerIPv6)
+					//prom.SuccessfulResolutionsTotal.Inc()
 				}
 			}
 		} else {
@@ -202,7 +227,7 @@ func getQTypeResponse(m *dns.Msg, question dns.Question, host string, clientIP n
 	}
 
 	if config.IsDebug {
-		fmt.Println("Response:", resp)
+		log.Println("Response:", resp)
 	}
 
 }
@@ -214,7 +239,7 @@ func handleDNSRequest(w dns.ResponseWriter, r *dns.Msg, regexMap map[string]*reg
 
 	m := new(dns.Msg)
 	m.SetReply(r)
-	m.Authoritative = true
+	m.Authoritative = true // Set authoritative flag to compress response or not
 
 	var clientIP net.IP
 	//var upstreamAd string

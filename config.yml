@@ -4,23 +4,23 @@ upstream_dns_servers:
 allowed_qtypes:
   - A
   - AAAA
-  - CNAME
-  - PTR
-  - SOA
-  - TXT
-  - MX
-  - NS
-  - SRV
-  - NAPTR
-  - DS
-  - DNSKEY
-  - RRSIG
-  - CAA
-  - TLSA
-  - ANY
-  - AXFR
-  - IXFR
-  - OPT
+#  - CNAME
+#  - PTR
+#  - SOA
+#  - TXT
+#  - MX
+#  - NS
+#  - SRV
+#  - NAPTR
+#  - DS
+#  - DNSKEY
+#  - RRSIG
+#  - CAA
+#  - TLSA
+#  - ANY
+#  - AXFR
+#  - IXFR
+#  - OPT
 # Load balancing strategies robin, strict. Default is robin
 load_balancing_strategy: "robin"
 hosts_file: "hosts.txt"

@@ -10,8 +10,8 @@ import (
 
 // CacheEntry - Cache entries structure
 type CacheEntry struct {
-	IPv4         net.IP
-	IPv6         net.IP
+	IPv4         []net.IP
+	IPv6         []net.IP
 	CreationTime time.Time
 	TTL          time.Duration
 	DnsMsg       *dns.Msg

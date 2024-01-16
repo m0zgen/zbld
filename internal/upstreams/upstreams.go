@@ -94,7 +94,7 @@ func GetUpstreamServer(upstreams []string, balancingPolicy string) string {
 }
 
 // ResolveBothWithUpstream - Resolve both IPv4 and IPv6 addresses using upstream DNS with selected balancing strategy
-func ResolveBothWithUpstream(host string, clientIP net.IP, upstreamAddr string, cacheEnabled bool, cacheTTLSeconds int) (net.IP, net.IP, *dns.Msg) {
+func ResolveBothWithUpstream(host string, clientIP net.IP, upstreamAddr string, cacheEnabled bool, cacheTTLSeconds int) ([]net.IP, []net.IP, *dns.Msg) {
 
 	if cacheEnabled {
 		//log.Println("Cache enabled")
@@ -113,7 +113,7 @@ func ResolveBothWithUpstream(host string, clientIP net.IP, upstreamAddr string, 
 
 	// If cache does not contain entry for this host, resolve it with upstream DNS
 	client := dns.Client{}
-	var ipv4, ipv6 net.IP
+	var ipv4, ipv6 []net.IP
 
 	// Iterate over upstream DNS servers
 	// TODO: Add primary adn secondary upstream DNS servers or select random one from list
@@ -133,7 +133,8 @@ func ResolveBothWithUpstream(host string, clientIP net.IP, upstreamAddr string, 
 		//}
 		for _, answer := range respIPv4.Answer {
 			if a, ok := answer.(*dns.A); ok {
-				ipv4 = a.A
+				//ipv4 = a.A
+				ipv4 = append(ipv4, a.A)
 				log.Printf("IPv4 address: %s\n", ipv4)
 			}
 		}
@@ -154,7 +155,8 @@ func ResolveBothWithUpstream(host string, clientIP net.IP, upstreamAddr string, 
 		//}
 		for _, answer := range respIPv6.Answer {
 			if aaaa, ok := answer.(*dns.AAAA); ok {
-				ipv6 = aaaa.AAAA
+				//ipv6 = aaaa.AAAA
+				ipv6 = append(ipv6, aaaa.AAAA)
 				log.Printf("IPv6 address: %s\n", ipv6)
 			}
 		}
@@ -169,13 +171,20 @@ func ResolveBothWithUpstream(host string, clientIP net.IP, upstreamAddr string, 
 	//}
 
 	// Return nil for ipv6, if AAAA record is not found
-	if ipv6.Equal(net.ParseIP("::ffff:0.0.0.0")) {
-		ipv6 = nil
-	}
+	//for addr := range ipv6 {
+	//
+	//	if addr.Equal(net.ParseIP("::ffff:")) {
+	//				ipv6 = nil
+	//	}
+	//
+	//	if addr.Equal(net.ParseIP("::ffff:0.0.0.0")) {
+	//		ipv6 = nil
+	//	}
+	//}
 
 	if ipv4 != nil && ipv6 != nil {
 		// Domain has A (IPv4), but does not have AAAA (IPv6)
-		log.Printf("Domain %s has A address %s\n", host, ipv4.String())
+		log.Printf("Domain %s has A address %s\n", host, ipv4)
 	} else {
 		// The domain either does not have an A record (IPv4) or has an AAAA record (IPv6)
 		log.Printf("Domain %s does not have A address\n", host)

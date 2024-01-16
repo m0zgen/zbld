@@ -3,39 +3,53 @@ package queries
 import (
 	"github.com/miekg/dns"
 	"net"
-	prom "zdns/internal/prometheus"
 )
 
-func GetAnswer(ipAddress net.IP, hostName string, question dns.Question) dns.RR {
+func GetAnswer4(ipAddress net.IP, hostName string, question dns.Question) dns.RR {
 	switch question.Qtype {
 	case dns.TypeA:
 		return &dns.A{
 			Hdr: dns.RR_Header{
-				Name:   hostName,
+				Name:   question.Name,
 				Rrtype: dns.TypeA,
 				Class:  dns.ClassINET,
 				Ttl:    0,
 			},
 			A: ipAddress,
 		}
-		prom.SuccessfulResolutionsTotal.Inc()
+	case dns.TypeCNAME:
+		return &dns.CNAME{
+			Hdr: dns.RR_Header{
+				Name:   question.Name,
+				Rrtype: dns.TypeCNAME,
+				Class:  dns.ClassINET,
+				Ttl:    0,
+			},
+			Target: hostName,
+		}
+	default:
+		return nil
+	}
+}
+
+func GetAnswer6(ipAddress net.IP, hostName string, question dns.Question) dns.RR {
+	switch question.Qtype {
 	case dns.TypeAAAA:
 		return &dns.AAAA{
 			Hdr: dns.RR_Header{
 				Name:   question.Name,
 				Rrtype: dns.TypeAAAA,
 				Class:  dns.ClassINET,
-				Ttl:    3600, // Например, TTL 1 час
+				Ttl:    0,
 			},
-			AAAA: ipAddress, // Пример IPv6-адреса
+			AAAA: ipAddress,
 		}
 	default:
 		return nil
 	}
-	return nil
 }
 
-func CreateAnswerForAllowedQtype(ipAddress net.IP, hostName string, question *dns.Question) dns.RR {
+func CreateAnswerForAllowedQtype(ipAddress net.IP, question *dns.Question) dns.RR {
 	switch question.Qtype {
 	case dns.TypeA:
 		return &dns.A{
@@ -45,7 +59,7 @@ func CreateAnswerForAllowedQtype(ipAddress net.IP, hostName string, question *dn
 				Class:  dns.ClassINET,
 				Ttl:    0,
 			},
-			A: net.ParseIP(string(ipAddress)),
+			A: ipAddress,
 		}
 	case dns.TypeAAAA:
 		return &dns.AAAA{
