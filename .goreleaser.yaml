@@ -30,6 +30,7 @@ archives:
       - config.yml
       - hosts.txt
       - hosts-permanent.txt
+      - addits
 checksum:
   name_template: 'checksums.txt'
 snapshot:
