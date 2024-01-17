@@ -5,6 +5,8 @@
 /(^|^.*\.)openbld.(net)$/
 /(^|^.*\.)sys-adm.(in)$/
 /(^|^.*\.)sysconf.(in)$/
+/(^|^.*\.)hoster.kz$/
+/(^|^.*\.)ps.kz$/
 
 # [ Domain rules ] #
 github.com

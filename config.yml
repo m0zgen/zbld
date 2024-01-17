@@ -5,12 +5,13 @@ allowed_qtypes:
   - A
   - AAAA
   - CNAME
-#  - PTR
-#  - SOA
-#  - TXT
-#  - MX
-#  - NS
-#  - SRV
+  - NS
+  - MX
+  - SRV
+  - PTR
+  - SOA
+  - TXT
+# Not implemented yet
 #  - NAPTR
 #  - DS
 #  - DNSKEY

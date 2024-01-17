@@ -3,10 +3,13 @@ package queries
 import (
 	"fmt"
 	"github.com/miekg/dns"
+	"log"
 	"net"
 )
 
 // Local functions ---------------------------------------------------------- //
+
+// processSOA - Process SOA records and add them to the answer
 func processSOA(answerRR []dns.RR, m *dns.Msg) {
 	for _, rr := range answerRR {
 		if soa, ok := rr.(*dns.SOA); ok {
@@ -32,8 +35,28 @@ func processSOA(answerRR []dns.RR, m *dns.Msg) {
 	}
 }
 
+// processTXT - Process TXT records and add them to the answer
+func processTXT(answerRR []dns.RR, m *dns.Msg) {
+	for _, rr := range answerRR {
+		if txt, ok := rr.(*dns.TXT); ok {
+			// Extract needed data from TXT record
+			// As example: txt.Txt
+			// Then add this data to the answer
+			m.Answer = append(m.Answer, &dns.TXT{
+				Hdr: dns.RR_Header{
+					Name:   m.Question[0].Name,
+					Rrtype: dns.TypeTXT,
+					Class:  dns.ClassINET,
+					Ttl:    txt.Hdr.Ttl},
+				Txt: txt.Txt,
+				// Another TXT fields
+			})
+		}
+	}
+}
+
 func hasSOARecords(response *dns.Msg) bool {
-	// Проверяем Answer section
+	// Check Answer section
 	if len(response.Answer) > 0 {
 		for _, rr := range response.Answer {
 			if _, ok := rr.(*dns.SOA); ok {
@@ -42,7 +65,7 @@ func hasSOARecords(response *dns.Msg) bool {
 		}
 	}
 
-	// Проверяем Authority section
+	// Check Authority section
 	if len(response.Ns) > 0 {
 		for _, rr := range response.Ns {
 			if _, ok := rr.(*dns.SOA); ok {
@@ -61,6 +84,22 @@ func hasSOARecords(response *dns.Msg) bool {
 	}
 
 	return false
+}
+
+func processA(answerRR []dns.RR, m *dns.Msg) {
+	for _, rr := range answerRR {
+		if a, ok := rr.(*dns.A); ok {
+
+			m.Answer = append(m.Answer, &dns.A{
+				Hdr: dns.RR_Header{
+					Name:   m.Question[0].Name,
+					Rrtype: dns.TypeA,
+					Class:  dns.ClassINET,
+					Ttl:    a.Hdr.Ttl},
+				A: a.A,
+			})
+		}
+	}
 }
 
 // External functions ------------------------------------------------------- //
@@ -119,37 +158,134 @@ func GetQTypeAnswer(hostName string, question dns.Question, upstreamAddr string)
 		if err == nil && len(respA.Answer) > 0 {
 			return respA.Answer, nil
 		}
-
-	case dns.TypeCNAME:
-
-		m.SetQuestion(hostName, question.Qtype)
-		response, _, err := client.Exchange(m, upstreamAddr)
+	case dns.TypeAAAA:
+		respAAAA, _, err := client.Exchange(m, upstreamAddr)
 		if err != nil {
 			return nil, err
 		}
-		// Обработка ответов в зависимости от типа записи
-		for _, answer := range response.Ns {
-			switch question.Qtype {
-			case dns.TypeCNAME:
-				if cname, ok := answer.(*dns.CNAME); ok {
-					records = append(records, cname.Target)
-				}
-				if hasSOARecords(response) {
-					// Process SOA records and add them to the answer
-					processSOA(response.Ns, m)
-					return m.Answer, nil
-				}
-			case dns.TypeSOA:
-				if soa, ok := answer.(*dns.SOA); ok {
-					records = append(records, fmt.Sprintf("Primary: %s, Responsible: %s", soa.Ns, soa.Mbox))
-				}
-			default:
-				return nil, fmt.Errorf("unsupported record type: %d", question.Qtype)
-			}
+
+		if err == nil && len(respAAAA.Answer) > 0 {
+			return respAAAA.Answer, nil
+		}
+	case dns.TypeCNAME:
+		//m.SetQuestion(hostName, question.Qtype)
+		respCNAME, _, err := client.Exchange(m, upstreamAddr)
+		if err != nil {
+			return nil, err
 		}
 
-	// Another requests types
+		if err == nil && len(respCNAME.Answer) > 0 {
+			return respCNAME.Answer, nil
+		} else {
 
+			// Process answers depending on the record type
+			for _, answer := range respCNAME.Ns {
+				switch question.Qtype {
+				case dns.TypeCNAME:
+					if cname, ok := answer.(*dns.CNAME); ok {
+						records = append(records, cname.Target)
+					}
+					if hasSOARecords(respCNAME) {
+						// Process SOA records and add them to the answer
+						processSOA(respCNAME.Ns, m)
+						return m.Answer, nil
+					}
+				case dns.TypeSOA:
+					if soa, ok := answer.(*dns.SOA); ok {
+						records = append(records, fmt.Sprintf("Primary: %s, Responsible: %s", soa.Ns, soa.Mbox))
+					}
+				default:
+					return nil, fmt.Errorf("unsupported record type: %d", question.Qtype)
+				}
+			}
+		}
+	case dns.TypeNS:
+		respNS, _, err := client.Exchange(m, upstreamAddr)
+		if err != nil {
+			return nil, err
+		}
+
+		if err == nil && len(respNS.Answer) > 0 {
+			return respNS.Answer, nil
+		}
+	case dns.TypeMX:
+		respMX, _, err := client.Exchange(m, upstreamAddr)
+		if err != nil {
+			return nil, err
+		}
+
+		if err == nil && len(respMX.Answer) > 0 {
+			return respMX.Answer, nil
+		}
+	case dns.TypePTR:
+		respPTR, _, err := client.Exchange(m, upstreamAddr)
+		if err != nil {
+			return nil, err
+		}
+
+		if err == nil && len(respPTR.Answer) > 0 {
+			return respPTR.Answer, nil
+		} else {
+
+			if hasSOARecords(respPTR) {
+				processSOA(respPTR.Ns, m)
+				return m.Answer, nil
+			}
+		}
+	case dns.TypeSOA:
+		respSOA, _, err := client.Exchange(m, upstreamAddr)
+		if err != nil {
+			return nil, err
+		}
+
+		if err == nil && len(respSOA.Answer) > 0 {
+			return respSOA.Answer, nil
+		} else {
+
+			if hasSOARecords(respSOA) {
+				processSOA(respSOA.Ns, m)
+				return m.Answer, nil
+			}
+		}
+	case dns.TypeSRV:
+		respSRV, _, err := client.Exchange(m, upstreamAddr)
+		if err != nil {
+			return nil, err
+		}
+
+		if err == nil && len(respSRV.Answer) > 0 {
+			return respSRV.Answer, nil
+		} else {
+			if hasSOARecords(respSRV) {
+				processSOA(respSRV.Ns, m)
+				return m.Answer, nil
+			}
+		}
+	case dns.TypeTXT:
+
+		msg := new(dns.Msg)
+		msg.SetQuestion("hoster.kz.", dns.TypeTXT)
+		response, _, err := client.Exchange(msg, upstreamAddr)
+		if err != nil {
+			return nil, err
+		}
+		log.Println("TXT response:", response)
+
+		respTXT, _, err := client.Exchange(m, upstreamAddr)
+
+		if err != nil {
+			return nil, err
+		}
+
+		if err == nil && len(respTXT.Answer) > 0 {
+			return respTXT.Answer, nil
+		} else {
+			if hasSOARecords(respTXT) {
+				processSOA(respTXT.Ns, m)
+				return m.Answer, nil
+			}
+		}
+	// Another requests types
 	default:
 		return nil, fmt.Errorf("unsupported DNS query type: %d", question.Qtype)
 	}
