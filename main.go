@@ -150,13 +150,34 @@ func getQTypeResponse(m *dns.Msg, question dns.Question, host string, clientIP n
 		// IPv4
 		if ipv4 != nil {
 
-			for addr := range ipv4 {
-				log.Println("IPv4 addr:", ipv4[addr])
-				answer := queries.GetAnswer4(ipv4[addr], host, question)
-				if answer != nil {
-					m.Answer = append(m.Answer, answer)
+			if question.Qtype == dns.TypeA {
+				for addr := range ipv4 {
+					log.Println("IPv4 addr:", ipv4[addr])
+					answer := queries.GetAv4(ipv4[addr], host, question)
+					if answer != nil {
+						m.Answer = append(m.Answer, answer)
+						if config.IsDebug {
+							log.Println("Answer v4:", answer)
+						}
+						prom.SuccessfulResolutionsTotal.Inc()
+					} else {
+						setResponseCode(m, resp.MsgHdr.Rcode)
+					}
+
+				}
+			}
+
+			if question.Qtype == dns.TypeCNAME {
+
+				rrAnswer, _ := queries.GetQTypeAnswer(host, question, upstreamAd)
+
+				if rrAnswer != nil {
+					//answer := queries.GetAv4(ipv4[0], host, question)
+					//m.Answer = append(m.Answer, answer)
+					m.Answer = append(m.Answer, rrAnswer...)
+
 					if config.IsDebug {
-						log.Println("Answer v4:", answer)
+						log.Println("Answer v4:", rrAnswer)
 					}
 					prom.SuccessfulResolutionsTotal.Inc()
 				} else {
@@ -181,7 +202,6 @@ func getQTypeResponse(m *dns.Msg, question dns.Question, host string, clientIP n
 			//}
 		} else {
 			// If IPv4 address is not available, set response code to code from MsgHdr.Rcode
-			//log.Println("MsgHdr.Rcode from resp:", resp.MsgHdr.Rcode)
 			setResponseCode(m, resp.MsgHdr.Rcode)
 		}
 
@@ -191,10 +211,9 @@ func getQTypeResponse(m *dns.Msg, question dns.Question, host string, clientIP n
 				if ipv6 != nil {
 					for addr := range ipv6 {
 						log.Println("IPv6 addr:", ipv6[addr])
-						answer := queries.GetAnswer6(ipv6[addr], host, question)
+						answer := queries.GetAAAAv6(ipv6[addr], host, question)
 						if answer != nil {
 							m.Answer = append(m.Answer, answer)
-							//log.Println("Answer v4:", answer)
 							prom.SuccessfulResolutionsTotal.Inc()
 						} else {
 							setResponseCode(m, resp.MsgHdr.Rcode)

@@ -111,13 +111,9 @@ func ResolveBothWithUpstream(host string, clientIP net.IP, upstreamAddr string, 
 		}
 	}
 
-	// If cache does not contain entry for this host, resolve it with upstream DNS
+	// If cache does not contain entry, resolve it with upstream DNS
 	client := dns.Client{}
 	var ipv4, ipv6 []net.IP
-
-	// Iterate over upstream DNS servers
-	// TODO: Add primary adn secondary upstream DNS servers or select random one from list
-	//for _, upstreamAddr := range config.UpstreamDNSServers {
 
 	// Resolve IPv4
 	msgIPv4 := &dns.Msg{}
@@ -131,6 +127,7 @@ func ResolveBothWithUpstream(host string, clientIP net.IP, upstreamAddr string, 
 		//	ipv4 = a.A
 		//	//break
 		//}
+		//
 		for _, answer := range respIPv4.Answer {
 			if a, ok := answer.(*dns.A); ok {
 				//ipv4 = a.A
@@ -153,6 +150,7 @@ func ResolveBothWithUpstream(host string, clientIP net.IP, upstreamAddr string, 
 		//	ipv6 = aaaa.AAAA
 		//	//break
 		//}
+		//
 		for _, answer := range respIPv6.Answer {
 			if aaaa, ok := answer.(*dns.AAAA); ok {
 				//ipv6 = aaaa.AAAA

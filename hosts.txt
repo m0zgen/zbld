@@ -1,7 +1,10 @@
 # [ Regex rules ] #
-/(^|^.*\.)google.(com|net)$/
+/(^|^.*\.)google.(com)$/
+/(^|^.*\.)yahoo.(com)$/
+/(^|^.*\.)yandex\.(ru|com|net|kz)$/
 /(^|^.*\.)openbld.(net)$/
 /(^|^.*\.)sys-adm.(in)$/
+/(^|^.*\.)sysconf.(in)$/
 
 # [ Domain rules ] #
 github.com

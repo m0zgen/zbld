@@ -4,7 +4,7 @@ upstream_dns_servers:
 allowed_qtypes:
   - A
   - AAAA
-#  - CNAME
+  - CNAME
 #  - PTR
 #  - SOA
 #  - TXT
@@ -39,7 +39,7 @@ enable_logging: true
 log_file: "zdns.log"
 # If inverse is set to true, then the hosts file will be treated as a blacklist
 # instead of a whitelist. In short, if true, then the hosts file will be marked as blacklisted
-inverse: true
+inverse: false
 # If enable_cache is set to true, then the results of DNS queries will be cached
 cache_enabled: true
 # Stale cache entries will be removed after this many seconds
