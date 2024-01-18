@@ -2,6 +2,7 @@
 package cache
 
 import (
+	"fmt"
 	"github.com/miekg/dns"
 	"net"
 	"sync"
@@ -55,4 +56,22 @@ func CheckAndDeleteExpiredEntries() {
 			delete(GlobalCache.Store, key)
 		}
 	}
+}
+
+// Caching for QTypes
+
+// CheckCache - Check if an entry exists in the cache
+func CheckCache(domain string, recordType uint16) (*CacheEntry, bool) {
+	key := GenerateCacheKey(domain, recordType)
+
+	GlobalCache.mu.RLock()
+	defer GlobalCache.mu.RUnlock()
+
+	entry, ok := GlobalCache.Store[key]
+	return &entry, ok
+}
+
+// GenerateCacheKey - Generate a unique cache key based on domain and record type
+func GenerateCacheKey(domain string, recordType uint16) string {
+	return fmt.Sprintf("%s_%d", domain, recordType)
 }

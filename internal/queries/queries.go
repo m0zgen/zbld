@@ -5,6 +5,8 @@ import (
 	"github.com/miekg/dns"
 	"log"
 	"net"
+	"time"
+	"zdns/internal/cache"
 )
 
 // Local functions ---------------------------------------------------------- //
@@ -140,8 +142,50 @@ func GetAAAAv6(ipAddress net.IP, hostName string, question dns.Question) dns.RR 
 	}
 }
 
+// bindAnswerCache - Bind answer to the cache
+func bindAnswerCache(resp *dns.Msg, hostName string, question dns.Question) {
+	// Bind answer to the cache
+
+	// Create cache entry
+	entry := cache.CacheEntry{
+		IPv4:         []net.IP{},
+		IPv6:         []net.IP{},
+		CreationTime: time.Now(),
+		TTL:          time.Duration(resp.Answer[0].Header().Ttl) * time.Second,
+		DnsMsg:       resp,
+	}
+
+	// Add records to the corresponding fields
+	for _, answer := range resp.Answer {
+		switch answer.Header().Rrtype {
+		case dns.TypeA:
+			if a, ok := answer.(*dns.A); ok {
+				entry.IPv4 = append(entry.IPv4, a.A)
+			}
+		case dns.TypeAAAA:
+			if aaaa, ok := answer.(*dns.AAAA); ok {
+				entry.IPv6 = append(entry.IPv6, aaaa.AAAA)
+			}
+		}
+	}
+
+	// Bind entry to the cache
+	//cache.GlobalCache.RLock()
+	cache.GlobalCache.Store[cache.GenerateCacheKey(hostName, question.Qtype)] = entry
+	//cache.GlobalCache.RUnlock()
+}
+
 // GetQTypeAnswer - Get answer for allowed Qtype
 func GetQTypeAnswer(hostName string, question dns.Question, upstreamAddr string) ([]dns.RR, error) {
+
+	//key := cache.GenerateCacheKey(hostName, question.Qtype)
+	// Check if the result is in the cache
+	//cache.GlobalCache.RLock()
+	if entry, found := cache.CheckCache(hostName, question.Qtype); found {
+		return entry.DnsMsg.Answer, nil
+	}
+	//cache.GlobalCache.RUnlock()
+
 	client := dns.Client{}
 	m := &dns.Msg{}
 	m.SetQuestion(dns.Fqdn(hostName), question.Qtype)
@@ -156,6 +200,8 @@ func GetQTypeAnswer(hostName string, question dns.Question, upstreamAddr string)
 		}
 
 		if err == nil && len(respA.Answer) > 0 {
+			// Add records to the corresponding cache fields
+			bindAnswerCache(respA, hostName, question)
 			return respA.Answer, nil
 		}
 	case dns.TypeAAAA:
@@ -165,6 +211,7 @@ func GetQTypeAnswer(hostName string, question dns.Question, upstreamAddr string)
 		}
 
 		if err == nil && len(respAAAA.Answer) > 0 {
+			bindAnswerCache(respAAAA, hostName, question)
 			return respAAAA.Answer, nil
 		}
 	case dns.TypeCNAME:
@@ -264,8 +311,9 @@ func GetQTypeAnswer(hostName string, question dns.Question, upstreamAddr string)
 	case dns.TypeTXT:
 
 		msg := new(dns.Msg)
-		msg.SetQuestion("hoster.kz.", dns.TypeTXT)
-		response, _, err := client.Exchange(msg, upstreamAddr)
+		msg.SetQuestion(dns.Fqdn(hostName), dns.TypeTXT)
+		c := new(dns.Client)
+		response, _, err := c.Exchange(msg, upstreamAddr)
 		if err != nil {
 			return nil, err
 		}
@@ -285,73 +333,10 @@ func GetQTypeAnswer(hostName string, question dns.Question, upstreamAddr string)
 				return m.Answer, nil
 			}
 		}
-	// Another requests types
+	// Another requests type
 	default:
 		return nil, fmt.Errorf("unsupported DNS query type: %d", question.Qtype)
 	}
 
 	return nil, nil
-}
-
-func CreateAnswerForAllowedQtype(ipAddress net.IP, question *dns.Question) dns.RR {
-	switch question.Qtype {
-	case dns.TypeA:
-		return &dns.A{
-			Hdr: dns.RR_Header{
-				Name:   question.Name,
-				Rrtype: dns.TypeA,
-				Class:  dns.ClassINET,
-				Ttl:    0,
-			},
-			A: ipAddress,
-		}
-	case dns.TypeAAAA:
-		return &dns.AAAA{
-			Hdr: dns.RR_Header{
-				Name:   question.Name,
-				Rrtype: dns.TypeAAAA,
-				Class:  dns.ClassINET,
-				Ttl:    3600, // Например, TTL 1 час
-			},
-			AAAA: net.ParseIP("2001:db8::1"), // Пример IPv6-адреса
-		}
-	case dns.TypeCNAME:
-		return &dns.CNAME{
-			Hdr: dns.RR_Header{
-				Name:   question.Name,
-				Rrtype: dns.TypeCNAME,
-				Class:  dns.ClassINET,
-				Ttl:    3600, // Например, TTL 1 час
-			},
-			Target: "example.com", // Пример целевого доменного имени
-		}
-	case dns.TypePTR:
-		return &dns.PTR{
-			Hdr: dns.RR_Header{
-				Name:   question.Name,
-				Rrtype: dns.TypePTR,
-				Class:  dns.ClassINET,
-				Ttl:    3600, // Например, TTL 1 час
-			},
-			Ptr: "ptr.example.com", // Пример целевого доменного имени
-		}
-	case dns.TypeSOA:
-		return &dns.SOA{
-			Hdr: dns.RR_Header{
-				Name:   question.Name,
-				Rrtype: dns.TypeSOA,
-				Class:  dns.ClassINET,
-				Ttl:    3600, // Например, TTL 1 час
-			},
-			Ns:      "ns1.example.com",
-			Mbox:    "admin.example.com",
-			Serial:  2022010101, // Пример серийного номера
-			Refresh: 3600,
-			Retry:   600,
-			Expire:  604800,
-			Minttl:  3600,
-		}
-	default:
-		return nil
-	}
 }

@@ -12,7 +12,6 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
-	"reflect"
 	"regexp"
 	"strings"
 	"sync"
@@ -88,10 +87,10 @@ func setResponseCode(m *dns.Msg, responseCode int) {
 
 // isAllowedQtype - Check if Qtype is allowed for DNS processing
 func isAllowedQtype(qtype uint16, allowedQtypes []string) bool {
-	// Преобразование числового значения Qtype в строку
+	// Convert Qtype from uint16 to string
 	qtypeStr := dns.TypeToString[qtype]
 
-	// Проверка, содержится ли строка Qtype в списке разрешенных
+	// Check if Qtype is in allowed list
 	for _, allowedQtype := range allowedQtypes {
 		if qtypeStr == allowedQtype {
 			return true
@@ -101,175 +100,188 @@ func isAllowedQtype(qtype uint16, allowedQtypes []string) bool {
 	return false
 }
 
-// createAnswerForAllowedQtype - Create DNS response for allowed Qtype
-func createAnswerForAllowedQtype(question dns.Question) dns.RR {
-	qtypeName := dns.TypeToString[question.Qtype]
-
-	// Получаем тип DNS записи по имени
-	qtype := dns.StringToType[qtypeName]
-	if qtype == 0 {
-		// Неизвестный Qtype, возвращаем nil или обрабатываем ошибку
-		return nil
-	}
-
-	// Получаем конструктор для создания экземпляра объекта Qtype
-	qtypeConstructor := reflect.New(reflect.TypeOf(dns.TypeToString[qtype])).Elem()
-
-	if qtypeConstructor.IsValid() {
-		log.Println("qtypeConstructor is valid" + qtypeConstructor.String())
-	}
-
-	// Пример: если qtypeConstructor - это *dns.A
-	if qtype == dns.TypeA {
-		// Создаем объект типа *dns.A и возвращаем его
-		return &dns.A{
-			Hdr: dns.RR_Header{
-				Name:   question.Name,
-				Rrtype: dns.TypeA,
-				Class:  dns.ClassINET,
-				Ttl:    3600, // Например, TTL 1 час
-			},
-			A: net.ParseIP("192.168.1.1"), // Пример IP-адреса
-		}
-	}
-	return nil
-}
-
 // getQTypeResponse - Get DNS response for A or AAAA query type
 func getQTypeResponse(m *dns.Msg, question dns.Question, host string, clientIP net.IP, upstreamAd string) {
 
-	//ipv4, ipv6, resp := upstreams.ResolveBothWithUpstream(host, clientIP, upstreamAd, config.CacheEnabled, config.CacheTTLSeconds)
+	//ipv4, ipv6, _ := upstreams.ResolveBothWithUpstream(host, clientIP, upstreamAd, config.CacheEnabled, config.CacheTTLSeconds)
+	//log.Println("Caching answer for:", host, ipv4, ipv6)
 
 	if isAllowedQtype(question.Qtype, config.AllowedQtypes) {
-		// Prossessing allowed Qtype and create answer
+		// Possessing allowed Qtype and create answer
 		log.Println("Creating answer for allowed Qtype:", question.Qtype)
+		rAnswer, _ := queries.GetQTypeAnswer(host, question, upstreamAd)
+		if rAnswer != nil {
+			m.Answer = append(m.Answer, rAnswer...)
+			prom.SuccessfulResolutionsTotal.Inc()
+		} else {
+			setResponseCode(m, dns.RcodeRefused)
+		}
+
+		//switch question.Qtype {
+		//case dns.TypeA:
+		//	aAnswer, _ := queries.GetQTypeAnswer(host, question, upstreamAd)
+		//	if aAnswer != nil {
+		//		m.Answer = append(m.Answer, aAnswer...)
+		//		if config.IsDebug {
+		//			log.Println("Answer for A:", aAnswer)
+		//		}
+		//		prom.SuccessfulResolutionsTotal.Inc()
+		//	} else {
+		//		setResponseCode(m, dns.RcodeNameError)
+		//	}
+		//case dns.TypeAAAA:
+		//	aaaaAnswer, _ := queries.GetQTypeAnswer(host, question, upstreamAd)
+		//	if aaaaAnswer != nil {
+		//		m.Answer = append(m.Answer, aaaaAnswer...)
+		//		if config.IsDebug {
+		//			log.Println("Answer for AAAA:", aaaaAnswer)
+		//		}
+		//		prom.SuccessfulResolutionsTotal.Inc()
+		//	} else {
+		//		setResponseCode(m, dns.RcodeNameError)
+		//	}
+		//case dns.TypeCNAME:
+		//	cnameAnswer, _ := queries.GetQTypeAnswer(host, question, upstreamAd)
+		//	if cnameAnswer != nil {
+		//		m.Answer = append(m.Answer, cnameAnswer...)
+		//		if config.IsDebug {
+		//			log.Println("Answer for CNAME:", cnameAnswer)
+		//		}
+		//		prom.SuccessfulResolutionsTotal.Inc()
+		//	} else {
+		//		setResponseCode(m, dns.RcodeNameError)
+		//	}
+		//case dns.TypeNS:
+		//
+		//
+		//}
 
 		//if ipv4 != nil {
-		if question.Qtype == dns.TypeA {
-			rrAAnswer, _ := queries.GetQTypeAnswer(host, question, upstreamAd)
-			if rrAAnswer != nil {
-				m.Answer = append(m.Answer, rrAAnswer...)
-				if config.IsDebug {
-					log.Println("Answer for A:", rrAAnswer)
-				}
-				prom.SuccessfulResolutionsTotal.Inc()
-			} else {
-				setResponseCode(m, dns.RcodeNameError)
-			}
-
-			//
-			//for addr := range ipv4 {
-			//	log.Println("IPv4 addr:", ipv4[addr])
-			//	answer := queries.GetAv4(ipv4[addr], host, question)
-			//	if answer != nil {
-			//		m.Answer = append(m.Answer, answer)
-			//		if config.IsDebug {
-			//			log.Println("Answer v4:", answer)
-			//		}
-			//		prom.SuccessfulResolutionsTotal.Inc()
-			//	} else {
-			//		setResponseCode(m, resp.MsgHdr.Rcode)
-			//	}
-			//
-			//}
-		}
-		if question.Qtype == dns.TypeAAAA {
-			rrAnswer, _ := queries.GetQTypeAnswer(host, question, upstreamAd)
-			if rrAnswer != nil {
-				m.Answer = append(m.Answer, rrAnswer...)
-				if config.IsDebug {
-					log.Println("Answer for AAAA:", rrAnswer)
-				}
-				prom.SuccessfulResolutionsTotal.Inc()
-			} else {
-				setResponseCode(m, dns.RcodeNameError)
-			}
-		}
-		if question.Qtype == dns.TypeCNAME {
-			cnameAnswer, _ := queries.GetQTypeAnswer(host, question, upstreamAd)
-			if cnameAnswer != nil {
-				m.Answer = append(m.Answer, cnameAnswer...)
-				if config.IsDebug {
-					log.Println("Answer for CNAME:", cnameAnswer)
-				}
-				prom.SuccessfulResolutionsTotal.Inc()
-			} else {
-				setResponseCode(m, dns.RcodeNameError)
-			}
-
-		}
-		if question.Qtype == dns.TypeNS {
-			nsAnswer, _ := queries.GetQTypeAnswer(host, question, upstreamAd)
-			if nsAnswer != nil {
-				m.Answer = append(m.Answer, nsAnswer...)
-				if config.IsDebug {
-					log.Println("Answer for NS:", nsAnswer)
-				}
-				prom.SuccessfulResolutionsTotal.Inc()
-			} else {
-				setResponseCode(m, dns.RcodeNameError)
-			}
-		}
-		if question.Qtype == dns.TypeMX {
-			mxAnswer, _ := queries.GetQTypeAnswer(host, question, upstreamAd)
-			if mxAnswer != nil {
-				m.Answer = append(m.Answer, mxAnswer...)
-				if config.IsDebug {
-					log.Println("Answer for MX:", mxAnswer)
-				}
-				prom.SuccessfulResolutionsTotal.Inc()
-			} else {
-				setResponseCode(m, dns.RcodeNameError)
-			}
-		}
-		if question.Qtype == dns.TypeSOA {
-			soaAnswer, _ := queries.GetQTypeAnswer(host, question, upstreamAd)
-			if soaAnswer != nil {
-				m.Answer = append(m.Answer, soaAnswer...)
-				if config.IsDebug {
-					log.Println("Answer for SOA:", soaAnswer)
-				}
-				prom.SuccessfulResolutionsTotal.Inc()
-			} else {
-				setResponseCode(m, dns.RcodeNameError)
-			}
-		}
-		if question.Qtype == dns.TypeSRV {
-			srvAnswer, _ := queries.GetQTypeAnswer(host, question, upstreamAd)
-			if srvAnswer != nil {
-				m.Answer = append(m.Answer, srvAnswer...)
-				if config.IsDebug {
-					log.Println("Answer for SRV:", srvAnswer)
-				}
-				prom.SuccessfulResolutionsTotal.Inc()
-			} else {
-				setResponseCode(m, dns.RcodeNameError)
-			}
-		}
-		if question.Qtype == dns.TypePTR {
-			ptrAnswer, _ := queries.GetQTypeAnswer(host, question, upstreamAd)
-			if ptrAnswer != nil {
-				m.Answer = append(m.Answer, ptrAnswer...)
-				if config.IsDebug {
-					log.Println("Answer for PTR:", ptrAnswer)
-				}
-				prom.SuccessfulResolutionsTotal.Inc()
-			} else {
-				setResponseCode(m, dns.RcodeNameError)
-			}
-		}
-		if question.Qtype == dns.TypeTXT {
-			txtAnswer, _ := queries.GetQTypeAnswer(host, question, upstreamAd)
-			if txtAnswer != nil {
-				m.Answer = append(m.Answer, txtAnswer...)
-				if config.IsDebug {
-					log.Println("Answer for TXT:", txtAnswer)
-				}
-				prom.SuccessfulResolutionsTotal.Inc()
-			} else {
-				setResponseCode(m, dns.RcodeNameError)
-			}
-		}
+		//if question.Qtype == dns.TypeA {
+		//	aAnswer, _ := queries.GetQTypeAnswer(host, question, upstreamAd)
+		//	if aAnswer != nil {
+		//		m.Answer = append(m.Answer, aAnswer...)
+		//		if config.IsDebug {
+		//			log.Println("Answer for A:", aAnswer)
+		//		}
+		//		prom.SuccessfulResolutionsTotal.Inc()
+		//	} else {
+		//		setResponseCode(m, dns.RcodeNameError)
+		//	}
+		//
+		//	//
+		//	//for addr := range ipv4 {
+		//	//	log.Println("IPv4 addr:", ipv4[addr])
+		//	//	answer := queries.GetAv4(ipv4[addr], host, question)
+		//	//	if answer != nil {
+		//	//		m.Answer = append(m.Answer, answer)
+		//	//		if config.IsDebug {
+		//	//			log.Println("Answer v4:", answer)
+		//	//		}
+		//	//		prom.SuccessfulResolutionsTotal.Inc()
+		//	//	} else {
+		//	//		setResponseCode(m, resp.MsgHdr.Rcode)
+		//	//	}
+		//	//
+		//	//}
+		//}
+		//if question.Qtype == dns.TypeAAAA {
+		//	aaaaAnswer, _ := queries.GetQTypeAnswer(host, question, upstreamAd)
+		//	if aaaaAnswer != nil {
+		//		m.Answer = append(m.Answer, aaaaAnswer...)
+		//		if config.IsDebug {
+		//			log.Println("Answer for AAAA:", aaaaAnswer)
+		//		}
+		//		prom.SuccessfulResolutionsTotal.Inc()
+		//	} else {
+		//		setResponseCode(m, dns.RcodeNameError)
+		//	}
+		//}
+		//if question.Qtype == dns.TypeCNAME {
+		//	cnameAnswer, _ := queries.GetQTypeAnswer(host, question, upstreamAd)
+		//	if cnameAnswer != nil {
+		//		m.Answer = append(m.Answer, cnameAnswer...)
+		//		if config.IsDebug {
+		//			log.Println("Answer for CNAME:", cnameAnswer)
+		//		}
+		//		prom.SuccessfulResolutionsTotal.Inc()
+		//	} else {
+		//		setResponseCode(m, dns.RcodeNameError)
+		//	}
+		//
+		//}
+		//if question.Qtype == dns.TypeNS {
+		//	nsAnswer, _ := queries.GetQTypeAnswer(host, question, upstreamAd)
+		//	if nsAnswer != nil {
+		//		m.Answer = append(m.Answer, nsAnswer...)
+		//		if config.IsDebug {
+		//			log.Println("Answer for NS:", nsAnswer)
+		//		}
+		//		prom.SuccessfulResolutionsTotal.Inc()
+		//	} else {
+		//		setResponseCode(m, dns.RcodeNameError)
+		//	}
+		//}
+		//if question.Qtype == dns.TypeMX {
+		//	mxAnswer, _ := queries.GetQTypeAnswer(host, question, upstreamAd)
+		//	if mxAnswer != nil {
+		//		m.Answer = append(m.Answer, mxAnswer...)
+		//		if config.IsDebug {
+		//			log.Println("Answer for MX:", mxAnswer)
+		//		}
+		//		prom.SuccessfulResolutionsTotal.Inc()
+		//	} else {
+		//		setResponseCode(m, dns.RcodeNameError)
+		//	}
+		//}
+		//if question.Qtype == dns.TypeSOA {
+		//	soaAnswer, _ := queries.GetQTypeAnswer(host, question, upstreamAd)
+		//	if soaAnswer != nil {
+		//		m.Answer = append(m.Answer, soaAnswer...)
+		//		if config.IsDebug {
+		//			log.Println("Answer for SOA:", soaAnswer)
+		//		}
+		//		prom.SuccessfulResolutionsTotal.Inc()
+		//	} else {
+		//		setResponseCode(m, dns.RcodeNameError)
+		//	}
+		//}
+		//if question.Qtype == dns.TypeSRV {
+		//	srvAnswer, _ := queries.GetQTypeAnswer(host, question, upstreamAd)
+		//	if srvAnswer != nil {
+		//		m.Answer = append(m.Answer, srvAnswer...)
+		//		if config.IsDebug {
+		//			log.Println("Answer for SRV:", srvAnswer)
+		//		}
+		//		prom.SuccessfulResolutionsTotal.Inc()
+		//	} else {
+		//		setResponseCode(m, dns.RcodeNameError)
+		//	}
+		//}
+		//if question.Qtype == dns.TypePTR {
+		//	ptrAnswer, _ := queries.GetQTypeAnswer(host, question, upstreamAd)
+		//	if ptrAnswer != nil {
+		//		m.Answer = append(m.Answer, ptrAnswer...)
+		//		if config.IsDebug {
+		//			log.Println("Answer for PTR:", ptrAnswer)
+		//		}
+		//		prom.SuccessfulResolutionsTotal.Inc()
+		//	} else {
+		//		setResponseCode(m, dns.RcodeNameError)
+		//	}
+		//}
+		//if question.Qtype == dns.TypeTXT {
+		//	txtAnswer, _ := queries.GetQTypeAnswer(host, question, upstreamAd)
+		//	if txtAnswer != nil {
+		//		m.Answer = append(m.Answer, txtAnswer...)
+		//		if config.IsDebug {
+		//			log.Println("Answer for TXT:", txtAnswer)
+		//		}
+		//		prom.SuccessfulResolutionsTotal.Inc()
+		//	} else {
+		//		setResponseCode(m, dns.RcodeNameError)
+		//	}
+		//}
 
 	} else {
 		// If IPv4 address is not available, set response code to code from MsgHdr.Rcode (resp.MsgHdr.Rcode)

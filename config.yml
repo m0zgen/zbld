@@ -6,11 +6,11 @@ allowed_qtypes:
   - AAAA
   - CNAME
   - NS
-  - MX
-  - SRV
+#  - MX
+#  - SRV
   - PTR
-  - SOA
-  - TXT
+#  - SOA
+#  - TXT
 # Not implemented yet
 #  - NAPTR
 #  - DS
