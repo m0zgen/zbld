@@ -235,6 +235,7 @@ func handleDNSRequest(w dns.ResponseWriter, r *dns.Msg, regexMap map[string]*reg
 				returnZeroIP(m, clientIP, host)
 			}
 		}
+		cache.CheckAndDeleteExpiredEntries()
 		mu.Unlock()
 	}
 	// Send response to client and try to write response
