@@ -57,7 +57,7 @@ permanent_dns_servers:
   - "95.85.95.85:53"
   - "2.56.220.2:53"
 # Config version
-config_version: "0.2.2"
+config_version: "0.2.1"
 # Users management
 user_hosts_template: "addits/templates/user-hosts.txt"
 user_hosts_permanent_template: "addits/templates/user-hosts-permanent.txt"
