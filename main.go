@@ -305,8 +305,6 @@ func main() {
 		config.PermanentWhitelisted = permanentFile
 	}
 
-	// Show app version on start
-	var appVersion = config.ConfigVersion
 	// Get upstream DNS servers array from config
 	//upstreamServers = config.UpstreamDNSServers
 
@@ -342,7 +340,8 @@ func main() {
 		multiWriter := io.MultiWriter(logFile, os.Stdout)
 		// Setups logger to use multiwriter
 		log.SetOutput(multiWriter)
-		log.Println("Logging enabled. Version:", appVersion)
+		log.Println("Logging enabled. Version:", config.ConfigVersion)
+		log.Println("Balancing strategy:", config.BalancingStrategy)
 	} else {
 		log.Println("Logging disabled")
 	}

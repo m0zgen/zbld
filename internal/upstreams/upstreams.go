@@ -58,14 +58,14 @@ func GetUpstreamServer(upstreams []string, balancingPolicy string) string {
 
 	switch balancingPolicy {
 	case "robin":
-		log.Println("Round-robin strategy")
+		//log.Println("Round-robin strategy")
 		return getRobinUpstreamServer(upstreams)
 	case "strict":
-		log.Println("Strict strategy")
+		//log.Println("Strict strategy")
 		return getNextUpstreamServer(upstreams)
 	default:
 		// Default strategy is robin
-		log.Println("Default strategy (robin)")
+		//log.Println("Default strategy (robin)")
 		return getRobinUpstreamServer(upstreams)
 	}
 
