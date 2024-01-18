@@ -4,6 +4,7 @@ upstream_dns_servers:
 allowed_qtypes:
   - A
   - AAAA
+  - HTTPS
   - CNAME
   - NS
 #  - MX

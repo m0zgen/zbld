@@ -146,6 +146,15 @@ func GetQTypeAnswer(hostName string, question dns.Question, upstreamAddr string)
 			bindAnswerCache(respAAAA, hostName, question)
 			return respAAAA.Answer, nil
 		}
+	case dns.TypeHTTPS:
+		respHTTPS, _, err := client.Exchange(m, upstreamAddr)
+		if err != nil {
+			return nil, err
+		}
+		if err == nil && len(respHTTPS.Answer) > 0 {
+			bindAnswerCache(respHTTPS, hostName, question)
+			return respHTTPS.Answer, nil
+		}
 	case dns.TypeCNAME:
 		//m.SetQuestion(hostName, question.Qtype)
 		respCNAME, _, err := client.Exchange(m, upstreamAddr)
