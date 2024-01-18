@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"github.com/miekg/dns"
 	"github.com/prometheus/client_golang/prometheus"
+	"zdns/internal/cache"
 
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"io"
@@ -177,14 +178,29 @@ func handleDNSRequest(w dns.ResponseWriter, r *dns.Msg, regexMap map[string]*reg
 		mu.Lock()
 		// Resolve default hosts using upstream DNS for names not in hosts.txt
 		if (lists.IsMatching(_host, regexMap) && !config.Inverse) || (hosts[_host] && !config.Inverse) {
-			upstreamDefault := upstreams.GetUpstreamServer(config.UpstreamDNSServers, config.BalancingStrategy)
-			log.Printf("Resolving local host %s from client %s. Upstream server: %s\n", _host, clientIP, upstreamDefault)
-			getQTypeResponse(m, question, host, clientIP, upstreamDefault)
+			// Check cache before requesting
+			if entry, found := cache.CheckCache(host, question.Qtype); found {
+				log.Printf("Cache hit from handler for %s\n", host)
+				prom.CacheHitResponseTotal.Inc()
+				m.Answer = append(m.Answer, entry.DnsMsg.Answer...)
+				log.Printf("Answer: %s\n", entry.DnsMsg.Answer)
+			} else {
+				upstreamDefault := upstreams.GetUpstreamServer(config.UpstreamDNSServers, config.BalancingStrategy)
+				log.Printf("Resolving local host %s from client %s. Upstream server: %s\n", _host, clientIP, upstreamDefault)
+				getQTypeResponse(m, question, host, clientIP, upstreamDefault)
+			}
 		} else if (permanentHosts[_host]) || lists.IsMatching(_host, permanentRegexMap) && config.PermanentEnabled {
-			// Get permanent upstreams
-			upstreamPermanet := upstreams.GetUpstreamServer(config.DNSforWhitelisted, config.BalancingStrategy)
-			log.Printf("Resolving permanent host %s from client %s. Upstream server: %s\n", _host, clientIP, upstreamPermanet)
-			getQTypeResponse(m, question, host, clientIP, upstreamPermanet)
+			if entry, found := cache.CheckCache(host, question.Qtype); found {
+				log.Printf("Cache hit from handler for %s\n", host)
+				prom.CacheHitResponseTotal.Inc()
+				m.Answer = append(m.Answer, entry.DnsMsg.Answer...)
+				log.Printf("Answer: %s\n", entry.DnsMsg.Answer)
+			} else {
+				// Get permanent upstreams
+				upstreamPermanet := upstreams.GetUpstreamServer(config.DNSforWhitelisted, config.BalancingStrategy)
+				log.Printf("Resolving permanent host %s from client %s. Upstream server: %s\n", _host, clientIP, upstreamPermanet)
+				getQTypeResponse(m, question, host, clientIP, upstreamPermanet)
+			}
 		} else {
 			if (lists.IsMatching(_host, regexMap)) || (hosts[_host]) && !(permanentHosts[_host]) {
 				returnZeroIP(m, clientIP, host)
