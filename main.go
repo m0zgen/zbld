@@ -306,6 +306,7 @@ func getQTypeResponse(m *dns.Msg, question dns.Question, host string, clientIP n
 
 	} else {
 		// If IPv4 address is not available, set response code to code from MsgHdr.Rcode (resp.MsgHdr.Rcode)
+		log.Printf("Qtype is not allowed: %s. Allowed Qtypes: %s\n", question.Qtype, config.AllowedQtypes)
 		setResponseCode(m, dns.RcodeRefused)
 	}
 
