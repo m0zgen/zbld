@@ -132,10 +132,11 @@ func getQTypeResponse(m *dns.Msg, question dns.Question, host string, clientIP n
 		log.Println("Creating answer for allowed Qtype:", question.Qtype)
 		rAnswer, _ := queries.GetQTypeAnswer(host, question, upstreamAd)
 		if rAnswer != nil {
+			log.Printf("Answer: %s\n", rAnswer)
 			m.Answer = append(m.Answer, rAnswer...)
 			prom.SuccessfulResolutionsTotal.Inc()
 		} else {
-			log.Printf("Answer is empty. Setting response code to %d\n (NXDOMAIN)", dns.RcodeNameError)
+			log.Printf("Answer is empty. Setting response code to (NXDOMAIN) %d\n", dns.RcodeNameError)
 			setResponseCode(m, dns.RcodeNameError)
 		}
 
