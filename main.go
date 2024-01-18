@@ -135,7 +135,7 @@ func getQTypeResponse(m *dns.Msg, question dns.Question, host string, clientIP n
 			m.Answer = append(m.Answer, rAnswer...)
 			prom.SuccessfulResolutionsTotal.Inc()
 		} else {
-			setResponseCode(m, dns.RcodeRefused)
+			setResponseCode(m, dns.RcodeNameError)
 		}
 
 		//switch question.Qtype {
