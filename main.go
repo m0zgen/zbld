@@ -369,13 +369,12 @@ func handleDNSRequest(w dns.ResponseWriter, r *dns.Msg, regexMap map[string]*reg
 		// Resolve default hosts using upstream DNS for names not in hosts.txt
 		if (lists.IsMatching(_host, regexMap) && !config.Inverse) || (hosts[_host] && !config.Inverse) {
 			upstreamDefault := upstreams.GetUpstreamServer(config.UpstreamDNSServers, config.BalancingStrategy)
-			log.Println("Upstream server:", upstreamDefault)
-			log.Println("Resolving regular host from client:", clientIP, _host)
+			log.Printf("Resolving local host %s from client %s. Upstream server: %s\n", _host, clientIP, upstreamDefault)
 			getQTypeResponse(m, question, host, clientIP, upstreamDefault)
 		} else if (permanentHosts[_host]) || lists.IsMatching(_host, permanentRegexMap) && config.PermanentEnabled {
 			// Get permanent upstreams
 			upstreamPermanet := upstreams.GetUpstreamServer(config.DNSforWhitelisted, config.BalancingStrategy)
-			log.Println("Resolving permanent host from client:", clientIP, _host)
+			log.Printf("Resolving permanent host %s from client %s. Upstream server: %s\n", _host, clientIP, upstreamPermanet)
 			getQTypeResponse(m, question, host, clientIP, upstreamPermanet)
 		} else {
 			if (lists.IsMatching(_host, regexMap)) || (hosts[_host]) && !(permanentHosts[_host]) {
