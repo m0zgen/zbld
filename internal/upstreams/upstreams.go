@@ -48,6 +48,7 @@ func getRobinUpstreamServer(upstreams []string) string {
 	//defer mu.Unlock()
 	// Simple round-robin: select next server
 	CurrentIndex = (CurrentIndex + 1) % len(upstreams)
+	//log.Println("CurrentIndex: ", CurrentIndex)
 	return upstreams[CurrentIndex]
 }
 

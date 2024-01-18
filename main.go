@@ -128,10 +128,15 @@ func getQTypeResponse(m *dns.Msg, question dns.Question, host string, clientIP n
 	// Check if Qtype is allowed
 	if isAllowedQtype(question.Qtype, config.AllowedQtypes) {
 		// Possessing allowed Qtype and create answer
-		log.Println("Creating answer for allowed Qtype:", question.Qtype)
+		if config.IsDebug {
+			log.Println("Creating answer for allowed Qtype:", question.Qtype)
+		}
+
 		rAnswer, _ := queries.GetQTypeAnswer(host, question, upstreamAd)
 		if rAnswer != nil {
-			log.Printf("Answer: %s\n", rAnswer)
+			if config.IsDebug {
+				log.Printf("Answer: %s\n", rAnswer)
+			}
 			m.Answer = append(m.Answer, rAnswer...)
 			prom.SuccessfulResolutionsTotal.Inc()
 		} else {
@@ -176,6 +181,7 @@ func handleDNSRequest(w dns.ResponseWriter, r *dns.Msg, regexMap map[string]*reg
 		_host := strings.TrimRight(host, ".")
 
 		mu.Lock()
+		// Check if host is in hosts.txt
 		// Resolve default hosts using upstream DNS for names not in hosts.txt
 		if (lists.IsMatching(_host, regexMap) && !config.Inverse) || (hosts[_host] && !config.Inverse) {
 			// Check cache before requesting
@@ -194,7 +200,9 @@ func handleDNSRequest(w dns.ResponseWriter, r *dns.Msg, regexMap map[string]*reg
 				log.Printf("Cache hit from handler for %s\n", host)
 				prom.CacheHitResponseTotal.Inc()
 				m.Answer = append(m.Answer, entry.DnsMsg.Answer...)
-				log.Printf("Answer: %s\n", entry.DnsMsg.Answer)
+				if config.IsDebug {
+					log.Printf("Answer: %s\n", entry.DnsMsg.Answer)
+				}
 			} else {
 				// Get permanent upstreams
 				upstreamPermanet := upstreams.GetUpstreamServer(config.DNSforWhitelisted, config.BalancingStrategy)
@@ -209,10 +217,12 @@ func handleDNSRequest(w dns.ResponseWriter, r *dns.Msg, regexMap map[string]*reg
 					log.Printf("Cache hit from handler inversion for %s\n", host)
 					prom.CacheHitResponseTotal.Inc()
 					m.Answer = append(m.Answer, entry.DnsMsg.Answer...)
-					log.Printf("Answer: %s\n", entry.DnsMsg.Answer)
+					if config.IsDebug {
+						log.Printf("Answer: %s\n", entry.DnsMsg.Answer)
+					}
 				} else {
 					upstreamDefault := upstreams.GetUpstreamServer(config.UpstreamDNSServers, config.BalancingStrategy)
-					log.Println("Upstream server:", upstreamDefault)
+					log.Println("Upstream server from inverse mode:", upstreamDefault)
 					getQTypeResponse(m, question, host, clientIP, upstreamDefault)
 				}
 			} else {
@@ -221,12 +231,21 @@ func handleDNSRequest(w dns.ResponseWriter, r *dns.Msg, regexMap map[string]*reg
 		}
 		mu.Unlock()
 	}
-	// Send response to client
+	// Send response to client and try to write response
 	err := w.WriteMsg(m)
+
+	// If error is occurred, check if it is a connection close error
 	if err != nil {
+		if netErr, ok := err.(net.Error); ok && netErr.Timeout() {
+			// Error is related to connection close
+			log.Println("Connection is closed. Skipping response.")
+			return
+		}
+		// Other errors
 		log.Printf("Error writing DNS response: %v", err)
 		return
 	}
+
 }
 
 // Inits and Main --------------------------------------------------------------- //
