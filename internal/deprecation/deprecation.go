@@ -430,3 +430,29 @@ func ResolveBothWithUpstream(host string, clientIP net.IP, upstreamAddr string, 
 //if config.IsDebug {
 //	log.Println("Response:", resp)
 //}
+
+// handleDNSRequest
+// var upstreamAd string
+// Check inverse and matching
+//if isMatching(_host, regexMap) {
+//	if config.Inverse {
+//		returnZeroIP(m, clientIP, host)
+//	} else {
+//		log.Println("Resolving with upstream DNS as RegEx:", clientIP, _host)
+//		getQTypeResponse(m, question, host, clientIP, _host, upstreamAd)
+//	}
+//} else if hosts[_host] {
+//	if config.Inverse {
+//		returnZeroIP(m, clientIP, host)
+//	} else {
+//		log.Println("Resolving with upstream DNS as simple line:", clientIP, _host)
+//		getQTypeResponse(m, question, host, clientIP, _host, upstreamAd)
+//	}
+//} else {
+//	if config.Inverse {
+//		log.Println("Resolving with upstream DNS for:", clientIP, _host)
+//		getQTypeResponse(m, question, host, clientIP, _host, upstreamAd)
+//	} else {
+//		returnZeroIP(m, clientIP, host)
+//	}
+//}

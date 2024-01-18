@@ -148,15 +148,13 @@ func getQTypeResponse(m *dns.Msg, question dns.Question, host string, clientIP n
 
 // handleDNSRequest - Handle DNS request from client
 func handleDNSRequest(w dns.ResponseWriter, r *dns.Msg, regexMap map[string]*regexp.Regexp) {
-	// Increase the DNS queries counter
+
+	var clientIP net.IP
 	prom.DnsQueriesTotal.Inc()
 
 	m := new(dns.Msg)
 	m.SetReply(r)
 	m.Authoritative = true // Set authoritative flag to compress response or not
-
-	var clientIP net.IP
-	//var upstreamAd string
 
 	// Check net.IP type
 	if tcpAddr, ok := w.RemoteAddr().(*net.TCPAddr); ok {
@@ -173,11 +171,10 @@ func handleDNSRequest(w dns.ResponseWriter, r *dns.Msg, regexMap map[string]*reg
 	for _, question := range r.Question {
 		log.Printf("Received query for %s type %s\n", question.Name, dns.TypeToString[question.Qtype])
 		host := question.Name
-		// Убрать точку с конца FQDN
+		// Delete dot from the end of FQDN
 		_host := strings.TrimRight(host, ".")
 
 		mu.Lock()
-
 		// Resolve default hosts using upstream DNS for names not in hosts.txt
 		if (lists.IsMatching(_host, regexMap) && !config.Inverse) || (hosts[_host] && !config.Inverse) {
 			upstreamDefault := upstreams.GetUpstreamServer(config.UpstreamDNSServers, config.BalancingStrategy)
@@ -199,31 +196,9 @@ func handleDNSRequest(w dns.ResponseWriter, r *dns.Msg, regexMap map[string]*reg
 				returnZeroIP(m, clientIP, host)
 			}
 		}
-		//if isMatching(_host, regexMap) {
-		//	if config.Inverse {
-		//		returnZeroIP(m, clientIP, host)
-		//	} else {
-		//		log.Println("Resolving with upstream DNS as RegEx:", clientIP, _host)
-		//		getQTypeResponse(m, question, host, clientIP, _host, upstreamAd)
-		//	}
-		//} else if hosts[_host] {
-		//	if config.Inverse {
-		//		returnZeroIP(m, clientIP, host)
-		//	} else {
-		//		log.Println("Resolving with upstream DNS as simple line:", clientIP, _host)
-		//		getQTypeResponse(m, question, host, clientIP, _host, upstreamAd)
-		//	}
-		//} else {
-		//	if config.Inverse {
-		//		log.Println("Resolving with upstream DNS for:", clientIP, _host)
-		//		getQTypeResponse(m, question, host, clientIP, _host, upstreamAd)
-		//	} else {
-		//		returnZeroIP(m, clientIP, host)
-		//	}
-		//}
 		mu.Unlock()
 	}
-
+	// Send response to client
 	err := w.WriteMsg(m)
 	if err != nil {
 		log.Printf("Error writing DNS response: %v", err)
