@@ -205,9 +205,16 @@ func handleDNSRequest(w dns.ResponseWriter, r *dns.Msg, regexMap map[string]*reg
 			if (lists.IsMatching(_host, regexMap)) || (hosts[_host]) && !(permanentHosts[_host]) {
 				returnZeroIP(m, clientIP, host)
 			} else if config.Inverse {
-				upstreamDefault := upstreams.GetUpstreamServer(config.UpstreamDNSServers, config.BalancingStrategy)
-				log.Println("Upstream server:", upstreamDefault)
-				getQTypeResponse(m, question, host, clientIP, upstreamDefault)
+				if entry, found := cache.CheckCache(host, question.Qtype); found {
+					log.Printf("Cache hit from handler inversion for %s\n", host)
+					prom.CacheHitResponseTotal.Inc()
+					m.Answer = append(m.Answer, entry.DnsMsg.Answer...)
+					log.Printf("Answer: %s\n", entry.DnsMsg.Answer)
+				} else {
+					upstreamDefault := upstreams.GetUpstreamServer(config.UpstreamDNSServers, config.BalancingStrategy)
+					log.Println("Upstream server:", upstreamDefault)
+					getQTypeResponse(m, question, host, clientIP, upstreamDefault)
+				}
 			} else {
 				returnZeroIP(m, clientIP, host)
 			}
