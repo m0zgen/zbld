@@ -68,14 +68,15 @@ func askForDeletion() bool {
 }
 
 // isDirExists - Check if directory exists
-func isDirExists(dirPath string) bool {
-	_, err := os.Stat(dirPath)
+func isDirExists(path string) bool {
+	_, err := os.Stat(path)
+	if err == nil {
+		return true
+	}
 	if os.IsNotExist(err) {
-		//log.Println("Directory exists: ", info.IsDir())
 		return false
 	}
-
-	return true
+	return false
 }
 
 // generateDirs - Create directory if not exists
@@ -137,6 +138,7 @@ func copyFile(srcFile, dstFile string) error {
 func generateUserCatalog(username string, force bool) {
 
 	userSpaceDir := usersDir + "/" + username
+	log.Println("User space directory:", userSpaceDir)
 
 	generateDirs(usersDir)
 	generateDirs(usersLogDir)
@@ -159,7 +161,7 @@ func generateUserCatalog(username string, force bool) {
 		log.Println("Error copying file:", err)
 		return
 	}
-	err = copyFile(userHostsPermTmpl, userSpaceDir+"/"+"hosts_permanent.txt")
+	err = copyFile(userHostsPermTmpl, userSpaceDir+"/"+"hosts-permanent.txt")
 	if err != nil {
 		log.Println("Error copying file:", err)
 		return
@@ -380,7 +382,6 @@ func GenerateUserConfig(usernameWithAlias string, force bool) {
 
 	if !isDirExists(usersDir) {
 		generateDirs(usersLogDir)
-		//generateDirs(usersDir + "/user")
 	}
 
 	if useralias == "" {
@@ -421,7 +422,7 @@ func GenerateUserConfig(usernameWithAlias string, force bool) {
 		}
 		log.Println("New user name:", username)
 	} else {
-		log.Println("User is Numbered")
+		//log.Println("User is Numbered")
 		// If username not contains "user" set default name
 		if username[:4] != "user" {
 			username, err = getNextUserName(usersDir, "user")
@@ -449,7 +450,7 @@ func GenerateUserConfig(usernameWithAlias string, force bool) {
 		return
 	}
 
-	log.Println("User number:", number)
+	log.Println("User postfix number:", number)
 
 	// Update default ports and user index
 	updatedDNSPort := updateNum(50000, number)
@@ -475,15 +476,18 @@ func GenerateUserConfig(usernameWithAlias string, force bool) {
 	// Read template file
 	templateContent, err := os.ReadFile(templatePath)
 	if err != nil {
-		return
+		log.Println("Error reading template file:", err)
+		//return
+		os.Exit(1)
 	}
 
 	// Read and parse template file
 	tmpl, err := template.New(newFilename).Parse(string(templateContent))
 	//log.Println(tmpl)
 	if err != nil {
-		fmt.Println("Error parsing template:", err)
-		return
+		log.Println("Error parsing template:", err)
+		//return
+		os.Exit(1)
 	}
 
 	generateUserCatalog(username, force)

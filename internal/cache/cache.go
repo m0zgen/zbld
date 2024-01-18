@@ -2,6 +2,8 @@
 package cache
 
 import (
+	"fmt"
+	"github.com/miekg/dns"
 	"net"
 	"sync"
 	"time"
@@ -9,10 +11,11 @@ import (
 
 // CacheEntry - Cache entries structure
 type CacheEntry struct {
-	IPv4         net.IP
-	IPv6         net.IP
+	IPv4         []net.IP
+	IPv6         []net.IP
 	CreationTime time.Time
 	TTL          time.Duration
+	DnsMsg       *dns.Msg
 }
 
 // Cache - Structure for storing cache entries
@@ -53,4 +56,22 @@ func CheckAndDeleteExpiredEntries() {
 			delete(GlobalCache.Store, key)
 		}
 	}
+}
+
+// Caching for QTypes
+
+// CheckCache - Check if an entry exists in the cache
+func CheckCache(domain string, recordType uint16) (*CacheEntry, bool) {
+	key := GenerateCacheKey(domain, recordType)
+
+	GlobalCache.mu.RLock()
+	defer GlobalCache.mu.RUnlock()
+
+	entry, ok := GlobalCache.Store[key]
+	return &entry, ok
+}
+
+// GenerateCacheKey - Generate a unique cache key based on domain and record type
+func GenerateCacheKey(domain string, recordType uint16) string {
+	return fmt.Sprintf("%s_%d", domain, recordType)
 }

@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"github.com/miekg/dns"
 	"github.com/prometheus/client_golang/prometheus"
+
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"io"
 	"log"
@@ -20,6 +21,7 @@ import (
 	"zdns/internal/config"
 	"zdns/internal/lists"
 	"zdns/internal/prometheus"
+	"zdns/internal/queries"
 	"zdns/internal/upstreams"
 	"zdns/internal/usermgmt"
 )
@@ -36,45 +38,321 @@ var mu sync.Mutex
 
 // Process DNS queries ------------------------------------------------------- //
 
+// setResponseCode - Set DNS response code
+func setResponseCode(m *dns.Msg, responseCode int) {
+
+	// Case if error code from 1 to 5
+	// 1 - Format error - The name server was unable to interpret the query.
+	// 2 - Server failure - The name server was unable to process this query due to a problem with the name server.
+	// 3 - Name Error - Meaningful only for responses from an authoritative name server, this code signifies that the domain name referenced in the query does not exist.
+	// 4 - Not Implemented - The name server does not support the requested kind of query.
+	// 5 - Refused - The name server refuses to perform the specified operation for policy reasons.  For example, a name server may not wish to provide the information to the particular requester, or a name server may not wish to perform a particular operation (e.g., zone transfer) for particular data.
+
+	// Check if response code is valid
+	if responseCode >= dns.RcodeSuccess && responseCode <= dns.RcodeBadName {
+
+		switch responseCode {
+		case 0:
+			m.SetRcode(m, dns.RcodeSuccess)
+		case 1:
+			m.SetRcode(m, dns.RcodeFormatError)
+		case 2:
+			m.SetRcode(m, dns.RcodeServerFailure)
+		case 3:
+			m.SetRcode(m, dns.RcodeNameError)
+		case 4:
+			m.SetRcode(m, dns.RcodeNotImplemented)
+		case 5:
+			m.SetRcode(m, dns.RcodeRefused)
+		case 6:
+			m.SetRcode(m, dns.RcodeYXDomain)
+		case 7:
+			m.SetRcode(m, dns.RcodeYXRrset)
+		case 8:
+			m.SetRcode(m, dns.RcodeNXRrset)
+		case 9:
+			m.SetRcode(m, dns.RcodeNotAuth)
+		case 10:
+			m.SetRcode(m, dns.RcodeNotZone)
+
+		// Another cases
+		default:
+			m.SetRcode(m, dns.RcodeServerFailure)
+		}
+
+	} else {
+		// If invalid response code is passed, set default error code (SERVFAIL)
+		m.SetRcode(m, dns.RcodeServerFailure)
+	}
+}
+
+// returnZeroIP - Return zero IP address for blocked domains
+func returnZeroIP(m *dns.Msg, clientIP net.IP, host string) []dns.RR {
+
+	// Return 0.0.0.0 for names in hosts.txt
+	answer := dns.A{
+		Hdr: dns.RR_Header{
+			Name:   host,
+			Rrtype: dns.TypeA,
+			Class:  dns.ClassINET,
+			Ttl:    0,
+		},
+		A: net.ParseIP("0.0.0.0"),
+	}
+	m.Answer = append(m.Answer, &answer)
+	log.Println("Zero response for:", clientIP, host)
+	prom.ZeroResolutionsTotal.Inc()
+	return m.Answer
+
+}
+
+// isAllowedQtype - Check if Qtype is allowed for DNS processing
+func isAllowedQtype(qtype uint16, allowedQtypes []string) bool {
+	// Convert Qtype from uint16 to string
+	qtypeStr := dns.TypeToString[qtype]
+
+	// Check if Qtype is in allowed list
+	for _, allowedQtype := range allowedQtypes {
+		if qtypeStr == allowedQtype {
+			return true
+		}
+	}
+
+	return false
+}
+
 // getQTypeResponse - Get DNS response for A or AAAA query type
 func getQTypeResponse(m *dns.Msg, question dns.Question, host string, clientIP net.IP, upstreamAd string) {
-	// Resolve using upstream DNS for names not in hosts.txt
-	//log.Println("Resolving with upstream DNS for:", clientIP, _host)
-	ipv4, ipv6 := upstreams.ResolveBothWithUpstream(host, clientIP, upstreamAd, config.CacheEnabled, config.CacheTTLSeconds)
 
-	// IPv4
-	if question.Qtype == dns.TypeA {
-		answerIPv4 := dns.A{
-			Hdr: dns.RR_Header{
-				Name:   host,
-				Rrtype: dns.TypeA,
-				Class:  dns.ClassINET,
-				Ttl:    0,
-			},
-			A: ipv4,
+	//ipv4, ipv6, _ := upstreams.ResolveBothWithUpstream(host, clientIP, upstreamAd, config.CacheEnabled, config.CacheTTLSeconds)
+	//log.Println("Caching answer for:", host, ipv4, ipv6)
+
+	if isAllowedQtype(question.Qtype, config.AllowedQtypes) {
+		// Possessing allowed Qtype and create answer
+		log.Println("Creating answer for allowed Qtype:", question.Qtype)
+		rAnswer, _ := queries.GetQTypeAnswer(host, question, upstreamAd)
+		if rAnswer != nil {
+			m.Answer = append(m.Answer, rAnswer...)
+			prom.SuccessfulResolutionsTotal.Inc()
+		} else {
+			setResponseCode(m, dns.RcodeRefused)
 		}
-		m.Answer = append(m.Answer, &answerIPv4)
-		log.Println("Answer v4:", answerIPv4)
-		prom.SuccessfulResolutionsTotal.Inc()
+
+		//switch question.Qtype {
+		//case dns.TypeA:
+		//	aAnswer, _ := queries.GetQTypeAnswer(host, question, upstreamAd)
+		//	if aAnswer != nil {
+		//		m.Answer = append(m.Answer, aAnswer...)
+		//		if config.IsDebug {
+		//			log.Println("Answer for A:", aAnswer)
+		//		}
+		//		prom.SuccessfulResolutionsTotal.Inc()
+		//	} else {
+		//		setResponseCode(m, dns.RcodeNameError)
+		//	}
+		//case dns.TypeAAAA:
+		//	aaaaAnswer, _ := queries.GetQTypeAnswer(host, question, upstreamAd)
+		//	if aaaaAnswer != nil {
+		//		m.Answer = append(m.Answer, aaaaAnswer...)
+		//		if config.IsDebug {
+		//			log.Println("Answer for AAAA:", aaaaAnswer)
+		//		}
+		//		prom.SuccessfulResolutionsTotal.Inc()
+		//	} else {
+		//		setResponseCode(m, dns.RcodeNameError)
+		//	}
+		//case dns.TypeCNAME:
+		//	cnameAnswer, _ := queries.GetQTypeAnswer(host, question, upstreamAd)
+		//	if cnameAnswer != nil {
+		//		m.Answer = append(m.Answer, cnameAnswer...)
+		//		if config.IsDebug {
+		//			log.Println("Answer for CNAME:", cnameAnswer)
+		//		}
+		//		prom.SuccessfulResolutionsTotal.Inc()
+		//	} else {
+		//		setResponseCode(m, dns.RcodeNameError)
+		//	}
+		//case dns.TypeNS:
+		//
+		//
+		//}
+
+		//if ipv4 != nil {
+		//if question.Qtype == dns.TypeA {
+		//	aAnswer, _ := queries.GetQTypeAnswer(host, question, upstreamAd)
+		//	if aAnswer != nil {
+		//		m.Answer = append(m.Answer, aAnswer...)
+		//		if config.IsDebug {
+		//			log.Println("Answer for A:", aAnswer)
+		//		}
+		//		prom.SuccessfulResolutionsTotal.Inc()
+		//	} else {
+		//		setResponseCode(m, dns.RcodeNameError)
+		//	}
+		//
+		//	//
+		//	//for addr := range ipv4 {
+		//	//	log.Println("IPv4 addr:", ipv4[addr])
+		//	//	answer := queries.GetAv4(ipv4[addr], host, question)
+		//	//	if answer != nil {
+		//	//		m.Answer = append(m.Answer, answer)
+		//	//		if config.IsDebug {
+		//	//			log.Println("Answer v4:", answer)
+		//	//		}
+		//	//		prom.SuccessfulResolutionsTotal.Inc()
+		//	//	} else {
+		//	//		setResponseCode(m, resp.MsgHdr.Rcode)
+		//	//	}
+		//	//
+		//	//}
+		//}
+		//if question.Qtype == dns.TypeAAAA {
+		//	aaaaAnswer, _ := queries.GetQTypeAnswer(host, question, upstreamAd)
+		//	if aaaaAnswer != nil {
+		//		m.Answer = append(m.Answer, aaaaAnswer...)
+		//		if config.IsDebug {
+		//			log.Println("Answer for AAAA:", aaaaAnswer)
+		//		}
+		//		prom.SuccessfulResolutionsTotal.Inc()
+		//	} else {
+		//		setResponseCode(m, dns.RcodeNameError)
+		//	}
+		//}
+		//if question.Qtype == dns.TypeCNAME {
+		//	cnameAnswer, _ := queries.GetQTypeAnswer(host, question, upstreamAd)
+		//	if cnameAnswer != nil {
+		//		m.Answer = append(m.Answer, cnameAnswer...)
+		//		if config.IsDebug {
+		//			log.Println("Answer for CNAME:", cnameAnswer)
+		//		}
+		//		prom.SuccessfulResolutionsTotal.Inc()
+		//	} else {
+		//		setResponseCode(m, dns.RcodeNameError)
+		//	}
+		//
+		//}
+		//if question.Qtype == dns.TypeNS {
+		//	nsAnswer, _ := queries.GetQTypeAnswer(host, question, upstreamAd)
+		//	if nsAnswer != nil {
+		//		m.Answer = append(m.Answer, nsAnswer...)
+		//		if config.IsDebug {
+		//			log.Println("Answer for NS:", nsAnswer)
+		//		}
+		//		prom.SuccessfulResolutionsTotal.Inc()
+		//	} else {
+		//		setResponseCode(m, dns.RcodeNameError)
+		//	}
+		//}
+		//if question.Qtype == dns.TypeMX {
+		//	mxAnswer, _ := queries.GetQTypeAnswer(host, question, upstreamAd)
+		//	if mxAnswer != nil {
+		//		m.Answer = append(m.Answer, mxAnswer...)
+		//		if config.IsDebug {
+		//			log.Println("Answer for MX:", mxAnswer)
+		//		}
+		//		prom.SuccessfulResolutionsTotal.Inc()
+		//	} else {
+		//		setResponseCode(m, dns.RcodeNameError)
+		//	}
+		//}
+		//if question.Qtype == dns.TypeSOA {
+		//	soaAnswer, _ := queries.GetQTypeAnswer(host, question, upstreamAd)
+		//	if soaAnswer != nil {
+		//		m.Answer = append(m.Answer, soaAnswer...)
+		//		if config.IsDebug {
+		//			log.Println("Answer for SOA:", soaAnswer)
+		//		}
+		//		prom.SuccessfulResolutionsTotal.Inc()
+		//	} else {
+		//		setResponseCode(m, dns.RcodeNameError)
+		//	}
+		//}
+		//if question.Qtype == dns.TypeSRV {
+		//	srvAnswer, _ := queries.GetQTypeAnswer(host, question, upstreamAd)
+		//	if srvAnswer != nil {
+		//		m.Answer = append(m.Answer, srvAnswer...)
+		//		if config.IsDebug {
+		//			log.Println("Answer for SRV:", srvAnswer)
+		//		}
+		//		prom.SuccessfulResolutionsTotal.Inc()
+		//	} else {
+		//		setResponseCode(m, dns.RcodeNameError)
+		//	}
+		//}
+		//if question.Qtype == dns.TypePTR {
+		//	ptrAnswer, _ := queries.GetQTypeAnswer(host, question, upstreamAd)
+		//	if ptrAnswer != nil {
+		//		m.Answer = append(m.Answer, ptrAnswer...)
+		//		if config.IsDebug {
+		//			log.Println("Answer for PTR:", ptrAnswer)
+		//		}
+		//		prom.SuccessfulResolutionsTotal.Inc()
+		//	} else {
+		//		setResponseCode(m, dns.RcodeNameError)
+		//	}
+		//}
+		//if question.Qtype == dns.TypeTXT {
+		//	txtAnswer, _ := queries.GetQTypeAnswer(host, question, upstreamAd)
+		//	if txtAnswer != nil {
+		//		m.Answer = append(m.Answer, txtAnswer...)
+		//		if config.IsDebug {
+		//			log.Println("Answer for TXT:", txtAnswer)
+		//		}
+		//		prom.SuccessfulResolutionsTotal.Inc()
+		//	} else {
+		//		setResponseCode(m, dns.RcodeNameError)
+		//	}
+		//}
+
+	} else {
+		// If IPv4 address is not available, set response code to code from MsgHdr.Rcode (resp.MsgHdr.Rcode)
+		setResponseCode(m, dns.RcodeRefused)
 	}
 
 	// IPv6
-	if question.Qtype == dns.TypeAAAA {
-		if ipv6 != nil {
-			answerIPv6 := dns.AAAA{
-				Hdr: dns.RR_Header{
-					Name:   host,
-					Rrtype: dns.TypeAAAA,
-					Class:  dns.ClassINET,
-					Ttl:    0,
-				},
-				AAAA: ipv6,
-			}
-			m.Answer = append(m.Answer, &answerIPv6)
-			log.Println("Answer v6:", answerIPv6)
-			prom.SuccessfulResolutionsTotal.Inc()
-		}
-	}
+	//if ipv6 != nil {
+	//	if question.Qtype == dns.TypeAAAA {
+	//		if ipv6 != nil {
+	//			for addr := range ipv6 {
+	//				log.Println("IPv6 addr:", ipv6[addr])
+	//				answer := queries.GetAAAAv6(ipv6[addr], host, question)
+	//				if answer != nil {
+	//					m.Answer = append(m.Answer, answer)
+	//					prom.SuccessfulResolutionsTotal.Inc()
+	//				} else {
+	//					setResponseCode(m, resp.MsgHdr.Rcode)
+	//				}
+	//
+	//			}
+	//			//answerIPv6 := dns.AAAA{
+	//			//	Hdr: dns.RR_Header{
+	//			//		Name:   host,
+	//			//		Rrtype: dns.TypeAAAA,
+	//			//		Class:  dns.ClassINET,
+	//			//		Ttl:    0,
+	//			//	},
+	//			//	AAAA: ipv6,
+	//			//}
+	//			//m.Answer = append(m.Answer, &answerIPv6)
+	//			//log.Println("Answer v6:", answerIPv6)
+	//			//prom.SuccessfulResolutionsTotal.Inc()
+	//		}
+	//	}
+	//} else {
+	//	// If IPv6 address is not available, set response code to code from MsgHdr.Rcode
+	//	//log.Println("MsgHdr.Rcode from resp:", resp.MsgHdr.Rcode)
+	//	setResponseCode(m, resp.MsgHdr.Rcode)
+	//}
+	//} else {
+	//	// If Qtype is not allowed, set response code to 5 (Refused)
+	//	log.Println("Qtype is not allowed:", question.Qtype)
+	//	setResponseCode(m, 5)
+	//}
+
+	//if config.IsDebug {
+	//	log.Println("Response:", resp)
+	//}
+
 }
 
 // handleDNSRequest - Handle DNS request from client
@@ -84,7 +362,7 @@ func handleDNSRequest(w dns.ResponseWriter, r *dns.Msg, regexMap map[string]*reg
 
 	m := new(dns.Msg)
 	m.SetReply(r)
-	m.Authoritative = true
+	m.Authoritative = true // Set authoritative flag to compress response or not
 
 	var clientIP net.IP
 	//var upstreamAd string
@@ -112,23 +390,22 @@ func handleDNSRequest(w dns.ResponseWriter, r *dns.Msg, regexMap map[string]*reg
 		// Resolve default hosts using upstream DNS for names not in hosts.txt
 		if (lists.IsMatching(_host, regexMap) && !config.Inverse) || (hosts[_host] && !config.Inverse) {
 			upstreamDefault := upstreams.GetUpstreamServer(config.UpstreamDNSServers, config.BalancingStrategy)
-			log.Println("Upstream server:", upstreamDefault)
-			log.Println("Resolving regular host from client:", clientIP, _host)
+			log.Printf("Resolving local host %s from client %s. Upstream server: %s\n", _host, clientIP, upstreamDefault)
 			getQTypeResponse(m, question, host, clientIP, upstreamDefault)
 		} else if (permanentHosts[_host]) || lists.IsMatching(_host, permanentRegexMap) && config.PermanentEnabled {
 			// Get permanent upstreams
 			upstreamPermanet := upstreams.GetUpstreamServer(config.DNSforWhitelisted, config.BalancingStrategy)
-			log.Println("Resolving permanent host from client:", clientIP, _host)
+			log.Printf("Resolving permanent host %s from client %s. Upstream server: %s\n", _host, clientIP, upstreamPermanet)
 			getQTypeResponse(m, question, host, clientIP, upstreamPermanet)
 		} else {
 			if (lists.IsMatching(_host, regexMap)) || (hosts[_host]) && !(permanentHosts[_host]) {
-				upstreams.ReturnZeroIP(m, clientIP, host)
+				returnZeroIP(m, clientIP, host)
 			} else if config.Inverse {
 				upstreamDefault := upstreams.GetUpstreamServer(config.UpstreamDNSServers, config.BalancingStrategy)
 				log.Println("Upstream server:", upstreamDefault)
 				getQTypeResponse(m, question, host, clientIP, upstreamDefault)
 			} else {
-				upstreams.ReturnZeroIP(m, clientIP, host)
+				returnZeroIP(m, clientIP, host)
 			}
 		}
 		//if isMatching(_host, regexMap) {
