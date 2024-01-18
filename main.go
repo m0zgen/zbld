@@ -140,7 +140,7 @@ func getQTypeResponse(m *dns.Msg, question dns.Question, host string, clientIP n
 			m.Answer = append(m.Answer, rAnswer...)
 			prom.SuccessfulResolutionsTotal.Inc()
 		} else {
-			log.Printf("Answer is empty. Setting response code to (NXDOMAIN) %d\n", dns.RcodeNameError)
+			log.Printf("Answer is empty %s. Setting response code to (NXDOMAIN) %d\n", host, dns.RcodeNameError)
 			setResponseCode(m, dns.RcodeNameError)
 		}
 
@@ -206,7 +206,9 @@ func handleDNSRequest(w dns.ResponseWriter, r *dns.Msg, regexMap map[string]*reg
 			} else {
 				// Get permanent upstreams
 				upstreamPermanet := upstreams.GetUpstreamServer(config.DNSforWhitelisted, config.BalancingStrategy)
-				log.Printf("Resolving permanent host %s from client %s. Upstream server: %s\n", _host, clientIP, upstreamPermanet)
+				if config.IsDebug {
+					log.Printf("Resolving permanent host %s from client %s. Upstream server: %s\n", _host, clientIP, upstreamPermanet)
+				}
 				getQTypeResponse(m, question, host, clientIP, upstreamPermanet)
 			}
 		} else {
@@ -214,7 +216,9 @@ func handleDNSRequest(w dns.ResponseWriter, r *dns.Msg, regexMap map[string]*reg
 				returnZeroIP(m, clientIP, host)
 			} else if config.Inverse {
 				if entry, found := cache.CheckCache(host, question.Qtype); found {
-					log.Printf("Cache hit from handler inversion for %s\n", host)
+					if config.IsDebug {
+						log.Printf("Cache hit from handler inversion for %s\n", host)
+					}
 					prom.CacheHitResponseTotal.Inc()
 					m.Answer = append(m.Answer, entry.DnsMsg.Answer...)
 					if config.IsDebug {
@@ -222,7 +226,9 @@ func handleDNSRequest(w dns.ResponseWriter, r *dns.Msg, regexMap map[string]*reg
 					}
 				} else {
 					upstreamDefault := upstreams.GetUpstreamServer(config.UpstreamDNSServers, config.BalancingStrategy)
-					log.Println("Upstream server from inverse mode:", upstreamDefault)
+					if config.IsDebug {
+						log.Println("Upstream server from inverse mode:", upstreamDefault)
+					}
 					getQTypeResponse(m, question, host, clientIP, upstreamDefault)
 				}
 			} else {
@@ -297,6 +303,7 @@ func main() {
 	var hostsFile string
 	var permanentFile string
 	var wg = new(sync.WaitGroup)
+	var shutdownChan = make(chan struct{})
 
 	// Parse command line arguments
 	addUserFlag := flag.String("adduser", "", "Username for configuration")
@@ -419,7 +426,14 @@ func main() {
 
 		udpServer := &dns.Server{Addr: fmt.Sprintf(":%d", config.DNSPort), Net: "udp"}
 		dns.HandleFunc(".", func(w dns.ResponseWriter, r *dns.Msg) {
-			handleDNSRequest(w, r, regexMap)
+			//handleDNSRequest(w, r, regexMap)
+			select {
+			case <-shutdownChan:
+				log.Println("Shutting down UDP server.")
+				return
+			default:
+				handleDNSRequest(w, r, regexMap)
+			}
 		})
 
 		log.Printf("DNS server is listening on :%d (UDP)...\n", config.DNSPort)
@@ -436,7 +450,14 @@ func main() {
 
 		tcpServer := &dns.Server{Addr: fmt.Sprintf(":%d", config.DNSPort), Net: "tcp"}
 		dns.HandleFunc(".", func(w dns.ResponseWriter, r *dns.Msg) {
-			handleDNSRequest(w, r, regexMap)
+			//handleDNSRequest(w, r, regexMap)
+			select {
+			case <-shutdownChan:
+				log.Println("Shutting down UDP server.")
+				return
+			default:
+				handleDNSRequest(w, r, regexMap)
+			}
 		})
 
 		log.Printf("DNS server is listening on :%d (TCP)...\n", config.DNSPort)
@@ -476,6 +497,11 @@ func main() {
 	exitcode := <-exitchnl
 
 	// End of program ----------------------------------------------------------- //
+	// Let the servers run for a while (e.g., 10 seconds)
+	time.Sleep(10 * time.Second)
+
+	// Send a signal to shut down the servers
+	close(shutdownChan)
 
 	// Waiting for all goroutines to complete and ensure exit
 	wg.Wait()
