@@ -86,6 +86,26 @@ func GetAAAAv6(ipAddress net.IP, hostName string, question dns.Question) dns.RR 
 
 // Upstreams ---------------------------------------------------------------- //
 
+// ReturnZeroIP - Return zero IP address for blocked domains
+func ReturnZeroIP(m *dns.Msg, clientIP net.IP, host string) []dns.RR {
+
+	// Return 0.0.0.0 for names in hosts.txt
+	answer := dns.A{
+		Hdr: dns.RR_Header{
+			Name:   host,
+			Rrtype: dns.TypeA,
+			Class:  dns.ClassINET,
+			Ttl:    0,
+		},
+		A: net.ParseIP("0.0.0.0"),
+	}
+	m.Answer = append(m.Answer, &answer)
+	log.Println("Zero response for:", clientIP, host)
+	prom.ZeroResolutionsTotal.Inc()
+	return m.Answer
+
+}
+
 // ResolveBothWithUpstream - Resolve both IPv4 and IPv6 addresses using upstream DNS with selected balancing strategy
 func ResolveBothWithUpstream(host string, clientIP net.IP, upstreamAddr string, cacheEnabled bool, cacheTTLSeconds int) ([]net.IP, []net.IP, *dns.Msg) {
 

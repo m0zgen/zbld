@@ -1,11 +1,9 @@
 package upstreams
 
 import (
-	"github.com/miekg/dns"
 	"log"
 	"net"
 	"time"
-	prom "zdns/internal/prometheus"
 )
 
 // Variables --------------------------------------------------------------- //
@@ -54,25 +52,6 @@ func getRobinUpstreamServer(upstreams []string) string {
 }
 
 // Functions for external usage ---------------------------------------------- //
-
-// ReturnZeroIP - Return zero IP address for blocked domains
-func ReturnZeroIP(m *dns.Msg, clientIP net.IP, host string) {
-
-	// Return 0.0.0.0 for names in hosts.txt
-	answer := dns.A{
-		Hdr: dns.RR_Header{
-			Name:   host,
-			Rrtype: dns.TypeA,
-			Class:  dns.ClassINET,
-			Ttl:    0,
-		},
-		A: net.ParseIP("0.0.0.0"),
-	}
-	m.Answer = append(m.Answer, &answer)
-	log.Println("Zero response for:", clientIP, host)
-	prom.ZeroResolutionsTotal.Inc()
-
-}
 
 // GetUpstreamServer - Get upstream server and apply balancing strategy (call from DNS handler
 func GetUpstreamServer(upstreams []string, balancingPolicy string) string {

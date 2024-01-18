@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"github.com/miekg/dns"
 	"github.com/prometheus/client_golang/prometheus"
+
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"io"
 	"log"
@@ -83,6 +84,26 @@ func setResponseCode(m *dns.Msg, responseCode int) {
 		// If invalid response code is passed, set default error code (SERVFAIL)
 		m.SetRcode(m, dns.RcodeServerFailure)
 	}
+}
+
+// returnZeroIP - Return zero IP address for blocked domains
+func returnZeroIP(m *dns.Msg, clientIP net.IP, host string) []dns.RR {
+
+	// Return 0.0.0.0 for names in hosts.txt
+	answer := dns.A{
+		Hdr: dns.RR_Header{
+			Name:   host,
+			Rrtype: dns.TypeA,
+			Class:  dns.ClassINET,
+			Ttl:    0,
+		},
+		A: net.ParseIP("0.0.0.0"),
+	}
+	m.Answer = append(m.Answer, &answer)
+	log.Println("Zero response for:", clientIP, host)
+	prom.ZeroResolutionsTotal.Inc()
+	return m.Answer
+
 }
 
 // isAllowedQtype - Check if Qtype is allowed for DNS processing
@@ -378,13 +399,13 @@ func handleDNSRequest(w dns.ResponseWriter, r *dns.Msg, regexMap map[string]*reg
 			getQTypeResponse(m, question, host, clientIP, upstreamPermanet)
 		} else {
 			if (lists.IsMatching(_host, regexMap)) || (hosts[_host]) && !(permanentHosts[_host]) {
-				upstreams.ReturnZeroIP(m, clientIP, host)
+				returnZeroIP(m, clientIP, host)
 			} else if config.Inverse {
 				upstreamDefault := upstreams.GetUpstreamServer(config.UpstreamDNSServers, config.BalancingStrategy)
 				log.Println("Upstream server:", upstreamDefault)
 				getQTypeResponse(m, question, host, clientIP, upstreamDefault)
 			} else {
-				upstreams.ReturnZeroIP(m, clientIP, host)
+				returnZeroIP(m, clientIP, host)
 			}
 		}
 		//if isMatching(_host, regexMap) {
