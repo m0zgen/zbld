@@ -140,7 +140,7 @@ func getQTypeResponse(m *dns.Msg, question dns.Question, host string, clientIP n
 			m.Answer = append(m.Answer, rAnswer...)
 			prom.SuccessfulResolutionsTotal.Inc()
 		} else {
-			log.Printf("Answer is empty %s. Setting response code to (NXDOMAIN) %d\n", host, dns.RcodeNameError)
+			log.Println("Answer is empty set response code to (NXDOMAIN) for:", host, dns.RcodeNameError)
 			setResponseCode(m, dns.RcodeNameError)
 		}
 
@@ -175,39 +175,42 @@ func handleDNSRequest(w dns.ResponseWriter, r *dns.Msg, regexMap map[string]*reg
 	}
 
 	for _, question := range r.Question {
-		log.Printf("Received query for %s type %s\n", question.Name, dns.TypeToString[question.Qtype])
+		log.Println("Received query for:", question.Name, dns.TypeToString[question.Qtype])
 		host := question.Name
 		// Delete dot from the end of FQDN
 		_host := strings.TrimRight(host, ".")
 
 		mu.Lock()
+		upstreamDefault := upstreams.GetUpstreamServer(config.UpstreamDNSServers, config.BalancingStrategy)
+		// Get permanent upstreams
+		upstreamPermanet := upstreams.GetUpstreamServer(config.DNSforWhitelisted, config.BalancingStrategy)
+
 		// Check if host is in hosts.txt
 		// Resolve default hosts using upstream DNS for names not in hosts.txt
 		if (lists.IsMatching(_host, regexMap) && !config.Inverse) || (hosts[_host] && !config.Inverse) {
 			// Check cache before requesting
 			if entry, found := cache.CheckCache(host, question.Qtype); found {
-				log.Printf("Cache hit from handler for %s\n", host)
-				prom.CacheHitResponseTotal.Inc()
-				m.Answer = append(m.Answer, entry.DnsMsg.Answer...)
-				log.Printf("Answer: %s\n", entry.DnsMsg.Answer)
-			} else {
-				upstreamDefault := upstreams.GetUpstreamServer(config.UpstreamDNSServers, config.BalancingStrategy)
-				log.Printf("Resolving local host %s from client %s. Upstream server: %s\n", _host, clientIP, upstreamDefault)
-				getQTypeResponse(m, question, host, clientIP, upstreamDefault)
-			}
-		} else if (permanentHosts[_host]) || lists.IsMatching(_host, permanentRegexMap) && config.PermanentEnabled {
-			if entry, found := cache.CheckCache(host, question.Qtype); found {
-				log.Printf("Cache hit from handler for %s\n", host)
+				log.Println("Cache hit from handler for:", host)
 				prom.CacheHitResponseTotal.Inc()
 				m.Answer = append(m.Answer, entry.DnsMsg.Answer...)
 				if config.IsDebug {
 					log.Printf("Answer: %s\n", entry.DnsMsg.Answer)
 				}
 			} else {
-				// Get permanent upstreams
-				upstreamPermanet := upstreams.GetUpstreamServer(config.DNSforWhitelisted, config.BalancingStrategy)
+				log.Println("Resolving (local host):", _host, clientIP, upstreamDefault)
+				getQTypeResponse(m, question, host, clientIP, upstreamDefault)
+			}
+		} else if (permanentHosts[_host]) || lists.IsMatching(_host, permanentRegexMap) && config.PermanentEnabled {
+			if entry, found := cache.CheckCache(host, question.Qtype); found {
+				log.Println("Cache hit from handler for:", host)
+				prom.CacheHitResponseTotal.Inc()
+				m.Answer = append(m.Answer, entry.DnsMsg.Answer...)
 				if config.IsDebug {
-					log.Printf("Resolving permanent host %s from client %s. Upstream server: %s\n", _host, clientIP, upstreamPermanet)
+					log.Printf("Answer: %s\n", entry.DnsMsg.Answer)
+				}
+			} else {
+				if config.IsDebug {
+					log.Println("Resolving (permanent host):", _host, clientIP, upstreamPermanet)
 				}
 				getQTypeResponse(m, question, host, clientIP, upstreamPermanet)
 			}
@@ -217,7 +220,7 @@ func handleDNSRequest(w dns.ResponseWriter, r *dns.Msg, regexMap map[string]*reg
 			} else if config.Inverse {
 				if entry, found := cache.CheckCache(host, question.Qtype); found {
 					if config.IsDebug {
-						log.Printf("Cache hit from handler inversion for %s\n", host)
+						log.Println("Cache hit from handler inversion for:", host)
 					}
 					prom.CacheHitResponseTotal.Inc()
 					m.Answer = append(m.Answer, entry.DnsMsg.Answer...)
@@ -225,7 +228,6 @@ func handleDNSRequest(w dns.ResponseWriter, r *dns.Msg, regexMap map[string]*reg
 						log.Printf("Answer: %s\n", entry.DnsMsg.Answer)
 					}
 				} else {
-					upstreamDefault := upstreams.GetUpstreamServer(config.UpstreamDNSServers, config.BalancingStrategy)
 					if config.IsDebug {
 						log.Println("Upstream server from inverse mode:", upstreamDefault)
 					}
@@ -398,8 +400,6 @@ func main() {
 		log.SetOutput(multiWriter)
 		log.Println("Logging enabled. Version:", config.ConfigVersion)
 		log.Println("Balancing strategy:", config.BalancingStrategy)
-	} else {
-		log.Println("Logging disabled")
 	}
 
 	// Load hosts with lists package -------------------------------------------- //
@@ -473,6 +473,8 @@ func main() {
 			log.Printf("Error starting DNS server (TCP): %s\n", err)
 		}
 	}()
+
+	// Run pro
 
 	// Run Prometheus metrics server
 	if config.MetricsEnabled {

@@ -7,9 +7,9 @@ allowed_qtypes:
   - HTTPS
   - CNAME
   - NS
+  - PTR
 #  - MX
 #  - SRV
-  - PTR
 #  - SOA
 #  - TXT
 # Not implemented yet
