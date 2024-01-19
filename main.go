@@ -1,12 +1,11 @@
 package main
 
 import (
+	"bufio"
 	"flag"
 	"fmt"
 	"github.com/miekg/dns"
 	"github.com/prometheus/client_golang/prometheus"
-	"zdns/internal/cache"
-
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"io"
 	"log"
@@ -19,6 +18,7 @@ import (
 	"sync"
 	"syscall"
 	"time"
+	"zdns/internal/cache"
 	"zdns/internal/config"
 	"zdns/internal/lists"
 	"zdns/internal/prometheus"
@@ -260,7 +260,13 @@ func handleDNSRequest(w dns.ResponseWriter, r *dns.Msg, regexMap map[string]*reg
 // InitLogging - Init logging to file and stdout
 func initLogging() {
 	if config.EnableLogging {
+		// Create buffered output for console
+		consoleOutput := bufio.NewWriter(os.Stdout)
+
+		// Setup logger to use buffered output for console
+		log.SetOutput(consoleOutput)
 		log.SetFlags(log.LstdFlags | log.Lshortfile)
+
 	} else {
 		log.SetOutput(os.Stdout)
 		log.Println("Logging disabled")
