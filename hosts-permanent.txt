@@ -1,4 +1,6 @@
 # [ Regex rules ] #
+/(^|^.*\.)google.(com)$/
+/(^|^.*\.)yandex\.(ru|com|net|kz)$/
 /(^|^.*\.)yahoo.(com)$/
 # /(^|^.*\.)openbld.(net)$/
 # /(^|^.*\.)sys-adm.(in)$/

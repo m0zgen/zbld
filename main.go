@@ -171,7 +171,6 @@ func entryInCache(m *dns.Msg, host string, question dns.Question) bool {
 func handleDNSRequest(w dns.ResponseWriter, r *dns.Msg, regexMap map[string]*regexp.Regexp) {
 
 	var clientIP net.IP
-	prom.DnsQueriesTotal.Inc()
 
 	m := new(dns.Msg)
 	m.SetReply(r)
@@ -197,46 +196,45 @@ func handleDNSRequest(w dns.ResponseWriter, r *dns.Msg, regexMap map[string]*reg
 		matching := lists.IsMatching(_host, regexMap)
 		permanentMatching := permanentHosts[_host] || (lists.IsMatching(_host, permanentRegexMap) && config.PermanentEnabled)
 
-		mu.Lock()
-		// Check if host is in hosts.txt
-		// Resolve default hosts using upstream DNS for names not in hosts.txt
-		if (matching && !config.Inverse) || (hosts[_host] && !config.Inverse) {
-			// Check cache before requesting upstream DNS server
-			if !entryInCache(m, host, question) {
-				upstreamDefault := upstreams.GetUpstreamServer(config.UpstreamDNSServers, config.BalancingStrategy)
+		//mu.Lock()
+		upstreamDefault := upstreams.GetUpstreamServer(config.UpstreamDNSServers, config.BalancingStrategy)
+		// Check cache before requesting upstream DNS server
+		if !entryInCache(m, host, question) {
+			// Check if host is in hosts.txt
+			// Resolve default hosts using upstream DNS for names not in hosts.txt
+			if (matching && !config.Inverse) || (hosts[_host] && !config.Inverse) {
 				log.Println("Resolving (local host):", _host, clientIP, upstreamDefault)
 				getQTypeResponse(m, question, host, clientIP, upstreamDefault)
-			}
-		} else if permanentMatching {
-			if !entryInCache(m, host, question) {
+			} else if permanentMatching {
 				// Get permanent upstreams
 				upstreamPermanet := upstreams.GetUpstreamServer(config.DNSforWhitelisted, config.BalancingStrategy)
 				getQTypeResponse(m, question, host, clientIP, upstreamPermanet)
 				if config.IsDebug {
 					log.Println("Resolving (permanent host):", _host, clientIP, upstreamPermanet)
 				}
-			}
-		} else {
-			if matching || hosts[_host] && !permanentHosts[_host] {
-				returnZeroIP(m, clientIP, host)
-			} else if config.Inverse {
-				if !entryInCache(m, host, question) {
-					upstreamDefault := upstreams.GetUpstreamServer(config.UpstreamDNSServers, config.BalancingStrategy)
+			} else {
+				if matching || hosts[_host] && !permanentHosts[_host] {
+					returnZeroIP(m, clientIP, host)
+				} else if config.Inverse {
+					//if !entryInCache(m, host, question) {
+					//upstreamDefault := upstreams.GetUpstreamServer(config.UpstreamDNSServers, config.BalancingStrategy)
 					getQTypeResponse(m, question, host, clientIP, upstreamDefault)
 					if config.IsDebug {
 						log.Println("Upstream server from inverse mode:", upstreamDefault)
 					}
+					//}
+				} else {
+					returnZeroIP(m, clientIP, host)
 				}
-			} else {
-				returnZeroIP(m, clientIP, host)
 			}
+		} else {
+			cache.CheckAndDeleteExpiredEntries()
 		}
-		cache.CheckAndDeleteExpiredEntries()
-		mu.Unlock()
+		//mu.Unlock()
 	}
 	// Send response to client and try to write response
 	err := w.WriteMsg(m)
-
+	prom.DnsQueriesTotal.Inc()
 	// If error is occurred, check if it is a connection close error
 	if err != nil {
 		if netErr, ok := err.(net.Error); ok && netErr.Timeout() {
@@ -419,22 +417,21 @@ func main() {
 	// Run DNS server ----------------------------------------------------------- //
 
 	// Add goroutines for DNS instances running
-	wg.Add(2)
-
+	wg.Add(1)
 	// Run DNS server for UDP requests
 	go func() {
 		defer wg.Done()
 
 		udpServer := &dns.Server{Addr: fmt.Sprintf(":%d", config.DNSPort), Net: "udp"}
 		dns.HandleFunc(".", func(w dns.ResponseWriter, r *dns.Msg) {
-			//handleDNSRequest(w, r, regexMap)
-			select {
-			case <-shutdownChan:
-				log.Println("Shutting down UDP server.")
-				return
-			default:
-				handleDNSRequest(w, r, regexMap)
-			}
+			handleDNSRequest(w, r, regexMap)
+			//select {
+			//case <-shutdownChan:
+			//	log.Println("Shutting down UDP server.")
+			//	return
+			//default:
+			//	handleDNSRequest(w, r, regexMap)
+			//}
 		})
 
 		log.Printf("DNS server is listening on :%d (UDP)...\n", config.DNSPort)
@@ -445,7 +442,7 @@ func main() {
 	}()
 
 	// Run DNS server for TCP requests
-	//wg.Add(1)
+	wg.Add(1)
 	go func() {
 		defer wg.Done()
 
