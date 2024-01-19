@@ -152,6 +152,21 @@ func getQTypeResponse(m *dns.Msg, question dns.Question, host string, clientIP n
 
 }
 
+// handleCacheHit - Handle cache hit
+func entryInCache(m *dns.Msg, host string, question dns.Question) bool {
+
+	if entry, found := cache.CheckCache(host, question.Qtype); found {
+		log.Println("Cache hit from handler for:", host)
+		prom.CacheHitResponseTotal.Inc()
+		m.Answer = append(m.Answer, entry.DnsMsg.Answer...)
+		if config.IsDebug {
+			log.Printf("Answer: %s\n", entry.DnsMsg.Answer)
+		}
+		return true
+	}
+	return false
+}
+
 // handleDNSRequest - Handle DNS request from client
 func handleDNSRequest(w dns.ResponseWriter, r *dns.Msg, regexMap map[string]*regexp.Regexp) {
 
@@ -179,59 +194,38 @@ func handleDNSRequest(w dns.ResponseWriter, r *dns.Msg, regexMap map[string]*reg
 		host := question.Name
 		// Delete dot from the end of FQDN
 		_host := strings.TrimRight(host, ".")
+		matching := lists.IsMatching(_host, regexMap)
+		permanentMatching := permanentHosts[_host] || (lists.IsMatching(_host, permanentRegexMap) && config.PermanentEnabled)
 
 		mu.Lock()
-		upstreamDefault := upstreams.GetUpstreamServer(config.UpstreamDNSServers, config.BalancingStrategy)
-		// Get permanent upstreams
-		upstreamPermanet := upstreams.GetUpstreamServer(config.DNSforWhitelisted, config.BalancingStrategy)
-
 		// Check if host is in hosts.txt
 		// Resolve default hosts using upstream DNS for names not in hosts.txt
-		if (lists.IsMatching(_host, regexMap) && !config.Inverse) || (hosts[_host] && !config.Inverse) {
-			// Check cache before requesting
-			if entry, found := cache.CheckCache(host, question.Qtype); found {
-				log.Println("Cache hit from handler for:", host)
-				prom.CacheHitResponseTotal.Inc()
-				m.Answer = append(m.Answer, entry.DnsMsg.Answer...)
-				if config.IsDebug {
-					log.Printf("Answer: %s\n", entry.DnsMsg.Answer)
-				}
-			} else {
+		if (matching && !config.Inverse) || (hosts[_host] && !config.Inverse) {
+			// Check cache before requesting upstream DNS server
+			if !entryInCache(m, host, question) {
+				upstreamDefault := upstreams.GetUpstreamServer(config.UpstreamDNSServers, config.BalancingStrategy)
 				log.Println("Resolving (local host):", _host, clientIP, upstreamDefault)
 				getQTypeResponse(m, question, host, clientIP, upstreamDefault)
 			}
-		} else if (permanentHosts[_host]) || lists.IsMatching(_host, permanentRegexMap) && config.PermanentEnabled {
-			if entry, found := cache.CheckCache(host, question.Qtype); found {
-				log.Println("Cache hit from handler for:", host)
-				prom.CacheHitResponseTotal.Inc()
-				m.Answer = append(m.Answer, entry.DnsMsg.Answer...)
-				if config.IsDebug {
-					log.Printf("Answer: %s\n", entry.DnsMsg.Answer)
-				}
-			} else {
+		} else if permanentMatching {
+			if !entryInCache(m, host, question) {
+				// Get permanent upstreams
+				upstreamPermanet := upstreams.GetUpstreamServer(config.DNSforWhitelisted, config.BalancingStrategy)
+				getQTypeResponse(m, question, host, clientIP, upstreamPermanet)
 				if config.IsDebug {
 					log.Println("Resolving (permanent host):", _host, clientIP, upstreamPermanet)
 				}
-				getQTypeResponse(m, question, host, clientIP, upstreamPermanet)
 			}
 		} else {
-			if (lists.IsMatching(_host, regexMap)) || (hosts[_host]) && !(permanentHosts[_host]) {
+			if matching || hosts[_host] && !permanentHosts[_host] {
 				returnZeroIP(m, clientIP, host)
 			} else if config.Inverse {
-				if entry, found := cache.CheckCache(host, question.Qtype); found {
-					if config.IsDebug {
-						log.Println("Cache hit from handler inversion for:", host)
-					}
-					prom.CacheHitResponseTotal.Inc()
-					m.Answer = append(m.Answer, entry.DnsMsg.Answer...)
-					if config.IsDebug {
-						log.Printf("Answer: %s\n", entry.DnsMsg.Answer)
-					}
-				} else {
+				if !entryInCache(m, host, question) {
+					upstreamDefault := upstreams.GetUpstreamServer(config.UpstreamDNSServers, config.BalancingStrategy)
+					getQTypeResponse(m, question, host, clientIP, upstreamDefault)
 					if config.IsDebug {
 						log.Println("Upstream server from inverse mode:", upstreamDefault)
 					}
-					getQTypeResponse(m, question, host, clientIP, upstreamDefault)
 				}
 			} else {
 				returnZeroIP(m, clientIP, host)
