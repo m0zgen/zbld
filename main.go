@@ -39,6 +39,21 @@ var mu sync.Mutex
 
 // Process DNS queries ------------------------------------------------------- //
 
+// handleCacheHit - Handle cache hit
+func entryInCache(m *dns.Msg, host string, question dns.Question) bool {
+
+	if entry, found := cache.CheckCache(host, question.Qtype); found {
+		log.Println("Cache hit from handler for:", host)
+		m.Answer = append(m.Answer, entry.DnsMsg.Answer...)
+		if config.IsDebug {
+			log.Printf("Answer: %s\n", entry.DnsMsg.Answer)
+		}
+		defer prom.CacheHitResponseTotal.Inc()
+		return true
+	}
+	return false
+}
+
 // setResponseCode - Set DNS response code
 func setResponseCode(m *dns.Msg, responseCode int) {
 
@@ -152,21 +167,6 @@ func getQTypeResponse(m *dns.Msg, question dns.Question, host string, clientIP n
 
 }
 
-// handleCacheHit - Handle cache hit
-func entryInCache(m *dns.Msg, host string, question dns.Question) bool {
-
-	if entry, found := cache.CheckCache(host, question.Qtype); found {
-		log.Println("Cache hit from handler for:", host)
-		prom.CacheHitResponseTotal.Inc()
-		m.Answer = append(m.Answer, entry.DnsMsg.Answer...)
-		if config.IsDebug {
-			log.Printf("Answer: %s\n", entry.DnsMsg.Answer)
-		}
-		return true
-	}
-	return false
-}
-
 // handleDNSRequest - Handle DNS request from client
 func handleDNSRequest(w dns.ResponseWriter, r *dns.Msg, regexMap map[string]*regexp.Regexp) {
 
@@ -232,9 +232,9 @@ func handleDNSRequest(w dns.ResponseWriter, r *dns.Msg, regexMap map[string]*reg
 		}
 		//mu.Unlock()
 	}
+	defer prom.DnsQueriesTotal.Inc()
 	// Send response to client and try to write response
 	err := w.WriteMsg(m)
-	prom.DnsQueriesTotal.Inc()
 	// If error is occurred, check if it is a connection close error
 	if err != nil {
 		if netErr, ok := err.(net.Error); ok && netErr.Timeout() {
