@@ -13,7 +13,7 @@ var CurrentIndex = 0
 
 // Functions for internal use ---------------------------------------------- //
 
-// Check if upstream DNS server is available
+// isUpstreamServerAvailable - Check if upstream DNS server is available
 func isUpstreamServerAvailable(upstreamAddr string, timeout time.Duration) bool {
 
 	conn, err := net.DialTimeout("udp", upstreamAddr, timeout)
@@ -23,14 +23,14 @@ func isUpstreamServerAvailable(upstreamAddr string, timeout time.Duration) bool 
 	defer func(conn net.Conn) {
 		err := conn.Close()
 		if err != nil {
-			log.Printf("Error closing connection: %v", err)
+			log.Println("Error closing connection:", err)
 			return // ignore error
 		}
 	}(conn)
 	return true
 }
 
-// Strict upstream balancing policy
+// getNextUpstreamServer - Strict upstream balancing policy
 func getNextUpstreamServer(upstreams []string) string {
 
 	// Check if first upstream server is available
@@ -42,7 +42,7 @@ func getNextUpstreamServer(upstreams []string) string {
 	return upstreams[1]
 }
 
-// Round-robin upstream balancing policy
+// getRobinUpstreamServer - Round-robin upstream balancing policy
 func getRobinUpstreamServer(upstreams []string) string {
 	//mu.Lock()
 	//defer mu.Unlock()
