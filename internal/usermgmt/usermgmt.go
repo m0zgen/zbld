@@ -38,7 +38,7 @@ var usersLogDir string
 
 // SetConfig - Accept config.Config from external package
 func SetConfig(cfg *configuration.Config) {
-	// Используйте cfg по необходимости
+	// Bind config variables
 	userHostsTemplate = cfg.UserHostsTemplate
 	userHostsPermTmpl = cfg.UserHostsPermTmpl
 	userConfigTemplate = cfg.UserConfigTemplate
@@ -268,7 +268,7 @@ func extractAlias(username string, extractAlias bool) string {
 
 // extractNumber - Extract number from username
 func extractNumber(s string) (int, error) {
-	// Ищем последовательность цифр в конце строки
+	// Find last digit index in username
 	lastDigitIndex := len(s)
 	for i := len(s) - 1; i >= 0; i-- {
 		if !isDigit(s[i]) {
@@ -293,7 +293,7 @@ func isDigit(c byte) bool {
 
 // updateNum - Update passed number (like as port) to user postfix number
 func updateNum(basePort, number int) int {
-	// Заменяем последние цифры в basePort на извлеченное число
+	// Change last digits in basePort etc. params in config to extracted number
 	portStr := strconv.Itoa(basePort)
 	updatedPortStr := portStr[:len(portStr)-len(strconv.Itoa(number))] + strconv.Itoa(number)
 	updatedPort, _ := strconv.Atoi(updatedPortStr)
@@ -318,7 +318,7 @@ func applyNewConfig(newFilename string, tmpl *template.Template, newUserConfig U
 		}
 	}(file)
 
-	// Применение шаблона и запись в файл
+	// Apply template and write to file
 	err = tmpl.Execute(file, newUserConfig)
 	if err != nil {
 		fmt.Println("Error applying template:", err)
@@ -395,14 +395,16 @@ func GenerateUserConfig(usernameWithAlias string, force bool) {
 			return
 		}
 
-		// If alis found - Exit
-		if len(configFiles) > 0 {
-			log.Println("Config files containing user alias found:")
-			for _, configFile := range configFiles {
-				fmt.Println(configFile)
+		if !force {
+			// If alis found - Exit
+			if len(configFiles) > 0 {
+				log.Println("Config files containing user alias found:")
+				for _, configFile := range configFiles {
+					fmt.Println(configFile)
+				}
+				log.Println("User alias already exists. Exiting...")
+				os.Exit(1)
 			}
-			log.Println("User alias already exists. Exiting...")
-			os.Exit(1)
 		}
 	}
 
@@ -472,6 +474,8 @@ func GenerateUserConfig(usernameWithAlias string, force bool) {
 		//return
 		os.Exit(1)
 	}
+
+	// Process template file and apply new config
 
 	// Read template file
 	templateContent, err := os.ReadFile(templatePath)

@@ -25,7 +25,7 @@ var isDebug bool
 // SetConfig - Accept config.Config from external package
 // and set configuration parameters to local variables
 func SetConfig(cfg *configuration.Config) {
-	// Используйте cfg по необходимости
+	// Set local variables through cgf.Config
 	useLocalHosts = cfg.UseLocalHosts
 	useRemoteHosts = cfg.UseRemoteHosts
 	hostsFileURL = cfg.HostsFileURL
@@ -39,7 +39,7 @@ func SetConfig(cfg *configuration.Config) {
 func IsMatching(host string, regexMap map[string]*regexp.Regexp) bool {
 	for pattern, regex := range regexMap {
 		if regex.MatchString(host) {
-			log.Printf("Host %s matches regex pattern %s\n", host, pattern)
+			log.Println("Host matches regex pattern:", host, pattern)
 			return true
 		}
 	}
@@ -54,8 +54,7 @@ func loadHosts(filename string, useRemote bool, urls []string, regexMap map[stri
 	var downloadedFile = "downloaded_" + filename
 
 	if useLocalHosts {
-		log.Printf("Loading local hosts from %s\n", filename)
-
+		//log.Printf("Loading local hosts from %s\n", filename)
 		// load local files
 		//for _, filename := range filenames {
 		file, err := os.Open(filename)
@@ -65,7 +64,7 @@ func loadHosts(filename string, useRemote bool, urls []string, regexMap map[stri
 		defer func(file *os.File) {
 			err := file.Close()
 			if err != nil {
-				log.Printf("Error closing file: %v", err)
+				log.Println("Error closing file:", err)
 				return // ignore error
 			}
 		}(file)
@@ -159,7 +158,7 @@ func loadHostsAndRegex(filename string, regexMap map[string]*regexp.Regexp, targ
 	defer func(file *os.File) {
 		err := file.Close()
 		if err != nil {
-			log.Printf("Error closing file: %v", err)
+			log.Println("Error closing file:", err)
 			return // ignore error
 		}
 	}(file)
@@ -204,7 +203,7 @@ func LoadHostsWithInterval(filename string, interval time.Duration, regexMap map
 	// Goroutine for periodic lists reload
 	go func() {
 		for {
-			log.Printf("Reloading hosts or URL file... %s\n", filename)
+			log.Println("Reloading hosts or URL file:", filename)
 			if err := loadHosts(filename, useRemoteHosts, hostsFileURL, regexMap, targetMap); err != nil {
 				log.Fatalf("Error loading hosts file: %v", err)
 			}
@@ -220,7 +219,7 @@ func LoadRegexWithInterval(filename string, interval time.Duration, regexMap map
 	// Goroutine for periodic lists reload
 	go func() {
 		for {
-			log.Printf("Loading regex %s\n", filename)
+			//log.Printf("Loading regex %s\n", filename)
 			if err := loadHostsAndRegex(filename, regexMap, targetMap); err != nil {
 				log.Fatalf("Error loading hosts and regex file: %v", err)
 			}

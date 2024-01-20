@@ -1,11 +1,11 @@
 package main
 
 import (
+	"bufio"
 	"flag"
 	"fmt"
 	"github.com/miekg/dns"
 	"github.com/prometheus/client_golang/prometheus"
-
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"io"
 	"log"
@@ -18,6 +18,7 @@ import (
 	"sync"
 	"syscall"
 	"time"
+	"zdns/internal/cache"
 	"zdns/internal/config"
 	"zdns/internal/lists"
 	"zdns/internal/prometheus"
@@ -37,6 +38,21 @@ var mu sync.Mutex
 //var upstreamServers []string
 
 // Process DNS queries ------------------------------------------------------- //
+
+// handleCacheHit - Handle cache hit
+func entryInCache(m *dns.Msg, host string, question dns.Question) bool {
+
+	if entry, found := cache.CheckCache(host, question.Qtype); found {
+		log.Println("Cache hit from handler for:", host)
+		m.Answer = append(m.Answer, entry.DnsMsg.Answer...)
+		if config.IsDebug {
+			log.Printf("Answer: %s\n", entry.DnsMsg.Answer)
+		}
+		defer prom.CacheHitResponseTotal.Inc()
+		return true
+	}
+	return false
+}
 
 // setResponseCode - Set DNS response code
 func setResponseCode(m *dns.Msg, responseCode int) {
@@ -124,248 +140,41 @@ func isAllowedQtype(qtype uint16, allowedQtypes []string) bool {
 // getQTypeResponse - Get DNS response for A or AAAA query type
 func getQTypeResponse(m *dns.Msg, question dns.Question, host string, clientIP net.IP, upstreamAd string) {
 
-	//ipv4, ipv6, _ := upstreams.ResolveBothWithUpstream(host, clientIP, upstreamAd, config.CacheEnabled, config.CacheTTLSeconds)
-	//log.Println("Caching answer for:", host, ipv4, ipv6)
-
+	// Check if Qtype is allowed
 	if isAllowedQtype(question.Qtype, config.AllowedQtypes) {
 		// Possessing allowed Qtype and create answer
-		log.Println("Creating answer for allowed Qtype:", question.Qtype)
+		if config.IsDebug {
+			log.Println("Creating answer for allowed Qtype:", question.Qtype)
+		}
+
 		rAnswer, _ := queries.GetQTypeAnswer(host, question, upstreamAd)
 		if rAnswer != nil {
+			if config.IsDebug {
+				log.Printf("Answer: %s\n", rAnswer)
+			}
 			m.Answer = append(m.Answer, rAnswer...)
 			prom.SuccessfulResolutionsTotal.Inc()
 		} else {
-			setResponseCode(m, dns.RcodeRefused)
+			log.Println("Answer is empty set response code to (NXDOMAIN) for:", host, dns.RcodeNameError)
+			setResponseCode(m, dns.RcodeNameError)
 		}
-
-		//switch question.Qtype {
-		//case dns.TypeA:
-		//	aAnswer, _ := queries.GetQTypeAnswer(host, question, upstreamAd)
-		//	if aAnswer != nil {
-		//		m.Answer = append(m.Answer, aAnswer...)
-		//		if config.IsDebug {
-		//			log.Println("Answer for A:", aAnswer)
-		//		}
-		//		prom.SuccessfulResolutionsTotal.Inc()
-		//	} else {
-		//		setResponseCode(m, dns.RcodeNameError)
-		//	}
-		//case dns.TypeAAAA:
-		//	aaaaAnswer, _ := queries.GetQTypeAnswer(host, question, upstreamAd)
-		//	if aaaaAnswer != nil {
-		//		m.Answer = append(m.Answer, aaaaAnswer...)
-		//		if config.IsDebug {
-		//			log.Println("Answer for AAAA:", aaaaAnswer)
-		//		}
-		//		prom.SuccessfulResolutionsTotal.Inc()
-		//	} else {
-		//		setResponseCode(m, dns.RcodeNameError)
-		//	}
-		//case dns.TypeCNAME:
-		//	cnameAnswer, _ := queries.GetQTypeAnswer(host, question, upstreamAd)
-		//	if cnameAnswer != nil {
-		//		m.Answer = append(m.Answer, cnameAnswer...)
-		//		if config.IsDebug {
-		//			log.Println("Answer for CNAME:", cnameAnswer)
-		//		}
-		//		prom.SuccessfulResolutionsTotal.Inc()
-		//	} else {
-		//		setResponseCode(m, dns.RcodeNameError)
-		//	}
-		//case dns.TypeNS:
-		//
-		//
-		//}
-
-		//if ipv4 != nil {
-		//if question.Qtype == dns.TypeA {
-		//	aAnswer, _ := queries.GetQTypeAnswer(host, question, upstreamAd)
-		//	if aAnswer != nil {
-		//		m.Answer = append(m.Answer, aAnswer...)
-		//		if config.IsDebug {
-		//			log.Println("Answer for A:", aAnswer)
-		//		}
-		//		prom.SuccessfulResolutionsTotal.Inc()
-		//	} else {
-		//		setResponseCode(m, dns.RcodeNameError)
-		//	}
-		//
-		//	//
-		//	//for addr := range ipv4 {
-		//	//	log.Println("IPv4 addr:", ipv4[addr])
-		//	//	answer := queries.GetAv4(ipv4[addr], host, question)
-		//	//	if answer != nil {
-		//	//		m.Answer = append(m.Answer, answer)
-		//	//		if config.IsDebug {
-		//	//			log.Println("Answer v4:", answer)
-		//	//		}
-		//	//		prom.SuccessfulResolutionsTotal.Inc()
-		//	//	} else {
-		//	//		setResponseCode(m, resp.MsgHdr.Rcode)
-		//	//	}
-		//	//
-		//	//}
-		//}
-		//if question.Qtype == dns.TypeAAAA {
-		//	aaaaAnswer, _ := queries.GetQTypeAnswer(host, question, upstreamAd)
-		//	if aaaaAnswer != nil {
-		//		m.Answer = append(m.Answer, aaaaAnswer...)
-		//		if config.IsDebug {
-		//			log.Println("Answer for AAAA:", aaaaAnswer)
-		//		}
-		//		prom.SuccessfulResolutionsTotal.Inc()
-		//	} else {
-		//		setResponseCode(m, dns.RcodeNameError)
-		//	}
-		//}
-		//if question.Qtype == dns.TypeCNAME {
-		//	cnameAnswer, _ := queries.GetQTypeAnswer(host, question, upstreamAd)
-		//	if cnameAnswer != nil {
-		//		m.Answer = append(m.Answer, cnameAnswer...)
-		//		if config.IsDebug {
-		//			log.Println("Answer for CNAME:", cnameAnswer)
-		//		}
-		//		prom.SuccessfulResolutionsTotal.Inc()
-		//	} else {
-		//		setResponseCode(m, dns.RcodeNameError)
-		//	}
-		//
-		//}
-		//if question.Qtype == dns.TypeNS {
-		//	nsAnswer, _ := queries.GetQTypeAnswer(host, question, upstreamAd)
-		//	if nsAnswer != nil {
-		//		m.Answer = append(m.Answer, nsAnswer...)
-		//		if config.IsDebug {
-		//			log.Println("Answer for NS:", nsAnswer)
-		//		}
-		//		prom.SuccessfulResolutionsTotal.Inc()
-		//	} else {
-		//		setResponseCode(m, dns.RcodeNameError)
-		//	}
-		//}
-		//if question.Qtype == dns.TypeMX {
-		//	mxAnswer, _ := queries.GetQTypeAnswer(host, question, upstreamAd)
-		//	if mxAnswer != nil {
-		//		m.Answer = append(m.Answer, mxAnswer...)
-		//		if config.IsDebug {
-		//			log.Println("Answer for MX:", mxAnswer)
-		//		}
-		//		prom.SuccessfulResolutionsTotal.Inc()
-		//	} else {
-		//		setResponseCode(m, dns.RcodeNameError)
-		//	}
-		//}
-		//if question.Qtype == dns.TypeSOA {
-		//	soaAnswer, _ := queries.GetQTypeAnswer(host, question, upstreamAd)
-		//	if soaAnswer != nil {
-		//		m.Answer = append(m.Answer, soaAnswer...)
-		//		if config.IsDebug {
-		//			log.Println("Answer for SOA:", soaAnswer)
-		//		}
-		//		prom.SuccessfulResolutionsTotal.Inc()
-		//	} else {
-		//		setResponseCode(m, dns.RcodeNameError)
-		//	}
-		//}
-		//if question.Qtype == dns.TypeSRV {
-		//	srvAnswer, _ := queries.GetQTypeAnswer(host, question, upstreamAd)
-		//	if srvAnswer != nil {
-		//		m.Answer = append(m.Answer, srvAnswer...)
-		//		if config.IsDebug {
-		//			log.Println("Answer for SRV:", srvAnswer)
-		//		}
-		//		prom.SuccessfulResolutionsTotal.Inc()
-		//	} else {
-		//		setResponseCode(m, dns.RcodeNameError)
-		//	}
-		//}
-		//if question.Qtype == dns.TypePTR {
-		//	ptrAnswer, _ := queries.GetQTypeAnswer(host, question, upstreamAd)
-		//	if ptrAnswer != nil {
-		//		m.Answer = append(m.Answer, ptrAnswer...)
-		//		if config.IsDebug {
-		//			log.Println("Answer for PTR:", ptrAnswer)
-		//		}
-		//		prom.SuccessfulResolutionsTotal.Inc()
-		//	} else {
-		//		setResponseCode(m, dns.RcodeNameError)
-		//	}
-		//}
-		//if question.Qtype == dns.TypeTXT {
-		//	txtAnswer, _ := queries.GetQTypeAnswer(host, question, upstreamAd)
-		//	if txtAnswer != nil {
-		//		m.Answer = append(m.Answer, txtAnswer...)
-		//		if config.IsDebug {
-		//			log.Println("Answer for TXT:", txtAnswer)
-		//		}
-		//		prom.SuccessfulResolutionsTotal.Inc()
-		//	} else {
-		//		setResponseCode(m, dns.RcodeNameError)
-		//	}
-		//}
 
 	} else {
 		// If IPv4 address is not available, set response code to code from MsgHdr.Rcode (resp.MsgHdr.Rcode)
+		log.Printf("Qtype is not allowed: %s. Allowed Qtypes: %s\n", question.Qtype, config.AllowedQtypes)
 		setResponseCode(m, dns.RcodeRefused)
 	}
-
-	// IPv6
-	//if ipv6 != nil {
-	//	if question.Qtype == dns.TypeAAAA {
-	//		if ipv6 != nil {
-	//			for addr := range ipv6 {
-	//				log.Println("IPv6 addr:", ipv6[addr])
-	//				answer := queries.GetAAAAv6(ipv6[addr], host, question)
-	//				if answer != nil {
-	//					m.Answer = append(m.Answer, answer)
-	//					prom.SuccessfulResolutionsTotal.Inc()
-	//				} else {
-	//					setResponseCode(m, resp.MsgHdr.Rcode)
-	//				}
-	//
-	//			}
-	//			//answerIPv6 := dns.AAAA{
-	//			//	Hdr: dns.RR_Header{
-	//			//		Name:   host,
-	//			//		Rrtype: dns.TypeAAAA,
-	//			//		Class:  dns.ClassINET,
-	//			//		Ttl:    0,
-	//			//	},
-	//			//	AAAA: ipv6,
-	//			//}
-	//			//m.Answer = append(m.Answer, &answerIPv6)
-	//			//log.Println("Answer v6:", answerIPv6)
-	//			//prom.SuccessfulResolutionsTotal.Inc()
-	//		}
-	//	}
-	//} else {
-	//	// If IPv6 address is not available, set response code to code from MsgHdr.Rcode
-	//	//log.Println("MsgHdr.Rcode from resp:", resp.MsgHdr.Rcode)
-	//	setResponseCode(m, resp.MsgHdr.Rcode)
-	//}
-	//} else {
-	//	// If Qtype is not allowed, set response code to 5 (Refused)
-	//	log.Println("Qtype is not allowed:", question.Qtype)
-	//	setResponseCode(m, 5)
-	//}
-
-	//if config.IsDebug {
-	//	log.Println("Response:", resp)
-	//}
 
 }
 
 // handleDNSRequest - Handle DNS request from client
 func handleDNSRequest(w dns.ResponseWriter, r *dns.Msg, regexMap map[string]*regexp.Regexp) {
-	// Increase the DNS queries counter
-	prom.DnsQueriesTotal.Inc()
+
+	var clientIP net.IP
 
 	m := new(dns.Msg)
 	m.SetReply(r)
 	m.Authoritative = true // Set authoritative flag to compress response or not
-
-	var clientIP net.IP
-	//var upstreamAd string
 
 	// Check net.IP type
 	if tcpAddr, ok := w.RemoteAddr().(*net.TCPAddr); ok {
@@ -380,64 +189,64 @@ func handleDNSRequest(w dns.ResponseWriter, r *dns.Msg, regexMap map[string]*reg
 	}
 
 	for _, question := range r.Question {
-		log.Printf("Received query for %s type %s\n", question.Name, dns.TypeToString[question.Qtype])
+		log.Println("Received query for:", question.Name, dns.TypeToString[question.Qtype])
 		host := question.Name
-		// Убрать точку с конца FQDN
+		// Delete dot from the end of FQDN
 		_host := strings.TrimRight(host, ".")
+		matching := lists.IsMatching(_host, regexMap)
+		permanentMatching := permanentHosts[_host] || (lists.IsMatching(_host, permanentRegexMap) && config.PermanentEnabled)
 
-		mu.Lock()
-
-		// Resolve default hosts using upstream DNS for names not in hosts.txt
-		if (lists.IsMatching(_host, regexMap) && !config.Inverse) || (hosts[_host] && !config.Inverse) {
-			upstreamDefault := upstreams.GetUpstreamServer(config.UpstreamDNSServers, config.BalancingStrategy)
-			log.Printf("Resolving local host %s from client %s. Upstream server: %s\n", _host, clientIP, upstreamDefault)
-			getQTypeResponse(m, question, host, clientIP, upstreamDefault)
-		} else if (permanentHosts[_host]) || lists.IsMatching(_host, permanentRegexMap) && config.PermanentEnabled {
-			// Get permanent upstreams
-			upstreamPermanet := upstreams.GetUpstreamServer(config.DNSforWhitelisted, config.BalancingStrategy)
-			log.Printf("Resolving permanent host %s from client %s. Upstream server: %s\n", _host, clientIP, upstreamPermanet)
-			getQTypeResponse(m, question, host, clientIP, upstreamPermanet)
-		} else {
-			if (lists.IsMatching(_host, regexMap)) || (hosts[_host]) && !(permanentHosts[_host]) {
-				returnZeroIP(m, clientIP, host)
-			} else if config.Inverse {
-				upstreamDefault := upstreams.GetUpstreamServer(config.UpstreamDNSServers, config.BalancingStrategy)
-				log.Println("Upstream server:", upstreamDefault)
+		//mu.Lock()
+		upstreamDefault := upstreams.GetUpstreamServer(config.UpstreamDNSServers, config.BalancingStrategy)
+		// Check cache before requesting upstream DNS server
+		if !entryInCache(m, host, question) {
+			// Check if host is in hosts.txt
+			// Resolve default hosts using upstream DNS for names not in hosts.txt
+			if (matching && !config.Inverse) || (hosts[_host] && !config.Inverse) {
+				log.Println("Resolving (local host):", _host, clientIP, upstreamDefault)
 				getQTypeResponse(m, question, host, clientIP, upstreamDefault)
+			} else if permanentMatching {
+				// Get permanent upstreams
+				upstreamPermanet := upstreams.GetUpstreamServer(config.DNSforWhitelisted, config.BalancingStrategy)
+				getQTypeResponse(m, question, host, clientIP, upstreamPermanet)
+				if config.IsDebug {
+					log.Println("Resolving (permanent host):", _host, clientIP, upstreamPermanet)
+				}
 			} else {
-				returnZeroIP(m, clientIP, host)
+				if matching || hosts[_host] && !permanentHosts[_host] {
+					returnZeroIP(m, clientIP, host)
+				} else if config.Inverse {
+					//if !entryInCache(m, host, question) {
+					//upstreamDefault := upstreams.GetUpstreamServer(config.UpstreamDNSServers, config.BalancingStrategy)
+					getQTypeResponse(m, question, host, clientIP, upstreamDefault)
+					if config.IsDebug {
+						log.Println("Upstream server from inverse mode:", upstreamDefault)
+					}
+					//}
+				} else {
+					returnZeroIP(m, clientIP, host)
+				}
 			}
+		} else {
+			cache.CheckAndDeleteExpiredEntries()
 		}
-		//if isMatching(_host, regexMap) {
-		//	if config.Inverse {
-		//		returnZeroIP(m, clientIP, host)
-		//	} else {
-		//		log.Println("Resolving with upstream DNS as RegEx:", clientIP, _host)
-		//		getQTypeResponse(m, question, host, clientIP, _host, upstreamAd)
-		//	}
-		//} else if hosts[_host] {
-		//	if config.Inverse {
-		//		returnZeroIP(m, clientIP, host)
-		//	} else {
-		//		log.Println("Resolving with upstream DNS as simple line:", clientIP, _host)
-		//		getQTypeResponse(m, question, host, clientIP, _host, upstreamAd)
-		//	}
-		//} else {
-		//	if config.Inverse {
-		//		log.Println("Resolving with upstream DNS for:", clientIP, _host)
-		//		getQTypeResponse(m, question, host, clientIP, _host, upstreamAd)
-		//	} else {
-		//		returnZeroIP(m, clientIP, host)
-		//	}
-		//}
-		mu.Unlock()
+		//mu.Unlock()
 	}
-
+	defer prom.DnsQueriesTotal.Inc()
+	// Send response to client and try to write response
 	err := w.WriteMsg(m)
+	// If error is occurred, check if it is a connection close error
 	if err != nil {
+		if netErr, ok := err.(net.Error); ok && netErr.Timeout() {
+			// Error is related to connection close
+			log.Println("Connection is closed. Skipping response.")
+			return
+		}
+		// Other errors
 		log.Printf("Error writing DNS response: %v", err)
 		return
 	}
+
 }
 
 // Inits and Main --------------------------------------------------------------- //
@@ -445,7 +254,13 @@ func handleDNSRequest(w dns.ResponseWriter, r *dns.Msg, regexMap map[string]*reg
 // InitLogging - Init logging to file and stdout
 func initLogging() {
 	if config.EnableLogging {
+		// Create buffered output for console
+		consoleOutput := bufio.NewWriter(os.Stdout)
+
+		// Setup logger to use buffered output for console
+		log.SetOutput(consoleOutput)
 		log.SetFlags(log.LstdFlags | log.Lshortfile)
+
 	} else {
 		log.SetOutput(os.Stdout)
 		log.Println("Logging disabled")
@@ -489,6 +304,7 @@ func main() {
 	var hostsFile string
 	var permanentFile string
 	var wg = new(sync.WaitGroup)
+	var shutdownChan = make(chan struct{})
 
 	// Parse command line arguments
 	addUserFlag := flag.String("adduser", "", "Username for configuration")
@@ -539,8 +355,6 @@ func main() {
 		config.PermanentWhitelisted = permanentFile
 	}
 
-	// Show app version on start
-	var appVersion = config.ConfigVersion
 	// Get upstream DNS servers array from config
 	//upstreamServers = config.UpstreamDNSServers
 
@@ -576,9 +390,8 @@ func main() {
 		multiWriter := io.MultiWriter(logFile, os.Stdout)
 		// Setups logger to use multiwriter
 		log.SetOutput(multiWriter)
-		log.Println("Logging enabled. Version:", appVersion)
-	} else {
-		log.Println("Logging disabled")
+		log.Println("Logging enabled. Version:", config.ConfigVersion)
+		log.Println("Balancing strategy:", config.BalancingStrategy)
 	}
 
 	// Load hosts with lists package -------------------------------------------- //
@@ -604,8 +417,7 @@ func main() {
 	// Run DNS server ----------------------------------------------------------- //
 
 	// Add goroutines for DNS instances running
-	wg.Add(2)
-
+	wg.Add(1)
 	// Run DNS server for UDP requests
 	go func() {
 		defer wg.Done()
@@ -613,6 +425,13 @@ func main() {
 		udpServer := &dns.Server{Addr: fmt.Sprintf(":%d", config.DNSPort), Net: "udp"}
 		dns.HandleFunc(".", func(w dns.ResponseWriter, r *dns.Msg) {
 			handleDNSRequest(w, r, regexMap)
+			//select {
+			//case <-shutdownChan:
+			//	log.Println("Shutting down UDP server.")
+			//	return
+			//default:
+			//	handleDNSRequest(w, r, regexMap)
+			//}
 		})
 
 		log.Printf("DNS server is listening on :%d (UDP)...\n", config.DNSPort)
@@ -623,13 +442,20 @@ func main() {
 	}()
 
 	// Run DNS server for TCP requests
-	//wg.Add(1)
+	wg.Add(1)
 	go func() {
 		defer wg.Done()
 
 		tcpServer := &dns.Server{Addr: fmt.Sprintf(":%d", config.DNSPort), Net: "tcp"}
 		dns.HandleFunc(".", func(w dns.ResponseWriter, r *dns.Msg) {
 			handleDNSRequest(w, r, regexMap)
+			//select {
+			//case <-shutdownChan:
+			//	log.Println("Shutting down UDP server.")
+			//	return
+			//default:
+			//	handleDNSRequest(w, r, regexMap)
+			//}
 		})
 
 		log.Printf("DNS server is listening on :%d (TCP)...\n", config.DNSPort)
@@ -659,7 +485,7 @@ func main() {
 	sigchnl := make(chan os.Signal, 1)
 	signal.Notify(sigchnl)
 	exitchnl := make(chan int)
-
+	//Call the function to handle the signals
 	go func() {
 		for {
 			s := <-sigchnl
@@ -669,6 +495,11 @@ func main() {
 	exitcode := <-exitchnl
 
 	// End of program ----------------------------------------------------------- //
+	// Let the servers run for a while (e.g., 10 seconds)
+	time.Sleep(10 * time.Second)
+
+	// Send a signal to shut down the servers
+	close(shutdownChan)
 
 	// Waiting for all goroutines to complete and ensure exit
 	wg.Wait()

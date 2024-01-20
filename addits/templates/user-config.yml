@@ -2,6 +2,17 @@
 upstream_dns_servers:
   - "1.1.1.1:53"
   - "8.8.8.8:53"
+allowed_qtypes:
+  - A
+  - AAAA
+  - CNAME
+  - HTTPS
+  - NS
+#  - MX
+#  - SRV
+  - PTR
+#  - SOA
+#  - TXT
 # Load balancing strategies robin, strict. Default is robin
 load_balancing_strategy: "robin"
 use_local_hosts: true
@@ -15,7 +26,7 @@ enable_logging: true
 cache_enabled: true
 # Stale cache entries will be removed after this many seconds
 cache_ttl_seconds: 3600
-# Metrice enabled
+# Metrics enabled
 metrics_enabled: true
 is_debug: false
 # Extra options

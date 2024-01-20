@@ -1,4 +1,3 @@
-// cache.go
 package cache
 
 import (
