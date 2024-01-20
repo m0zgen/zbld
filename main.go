@@ -448,14 +448,14 @@ func main() {
 
 		tcpServer := &dns.Server{Addr: fmt.Sprintf(":%d", config.DNSPort), Net: "tcp"}
 		dns.HandleFunc(".", func(w dns.ResponseWriter, r *dns.Msg) {
-			//handleDNSRequest(w, r, regexMap)
-			select {
-			case <-shutdownChan:
-				log.Println("Shutting down UDP server.")
-				return
-			default:
-				handleDNSRequest(w, r, regexMap)
-			}
+			handleDNSRequest(w, r, regexMap)
+			//select {
+			//case <-shutdownChan:
+			//	log.Println("Shutting down UDP server.")
+			//	return
+			//default:
+			//	handleDNSRequest(w, r, regexMap)
+			//}
 		})
 
 		log.Printf("DNS server is listening on :%d (TCP)...\n", config.DNSPort)
@@ -464,8 +464,6 @@ func main() {
 			log.Printf("Error starting DNS server (TCP): %s\n", err)
 		}
 	}()
-
-	// Run pro
 
 	// Run Prometheus metrics server
 	if config.MetricsEnabled {
@@ -487,7 +485,7 @@ func main() {
 	sigchnl := make(chan os.Signal, 1)
 	signal.Notify(sigchnl)
 	exitchnl := make(chan int)
-
+	//Call the function to handle the signals
 	go func() {
 		for {
 			s := <-sigchnl

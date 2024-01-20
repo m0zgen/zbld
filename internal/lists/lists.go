@@ -54,7 +54,7 @@ func loadHosts(filename string, useRemote bool, urls []string, regexMap map[stri
 	var downloadedFile = "downloaded_" + filename
 
 	if useLocalHosts {
-		log.Printf("Loading local hosts from %s\n", filename)
+		//log.Printf("Loading local hosts from %s\n", filename)
 
 		// load local files
 		//for _, filename := range filenames {
@@ -220,7 +220,7 @@ func LoadRegexWithInterval(filename string, interval time.Duration, regexMap map
 	// Goroutine for periodic lists reload
 	go func() {
 		for {
-			log.Printf("Loading regex %s\n", filename)
+			//log.Printf("Loading regex %s\n", filename)
 			if err := loadHostsAndRegex(filename, regexMap, targetMap); err != nil {
 				log.Fatalf("Error loading hosts and regex file: %v", err)
 			}
