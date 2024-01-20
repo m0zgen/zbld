@@ -249,8 +249,8 @@ func GetQTypeAnswer(hostName string, question dns.Question, upstreamAddr string)
 				return m.Answer, nil
 			}
 		}
+	//TODO: TXT in a testing status, need to recheck this
 	case dns.TypeTXT:
-
 		msg := new(dns.Msg)
 		msg.SetQuestion(dns.Fqdn(hostName), dns.TypeTXT)
 		c := new(dns.Client)
@@ -261,7 +261,6 @@ func GetQTypeAnswer(hostName string, question dns.Question, upstreamAddr string)
 		log.Println("TXT response:", response)
 
 		respTXT, _, err := client.Exchange(m, upstreamAddr)
-
 		if err != nil {
 			return nil, err
 		}
