@@ -101,8 +101,8 @@ Permanent lists and URLs will always be whitelisted and resolved to real IP addr
 This option convert zDNS from zero trust server to blacklist server, where `hosts.txt` and host URLs 
 is a list of blocked domains.
 
-[!IMPORTANT]
-Allowed permanent lists has priority over blocked
+> [!IMPORTANT]
+> Allowed permanent lists has priority over blocked
 
 ## Extra options
 
