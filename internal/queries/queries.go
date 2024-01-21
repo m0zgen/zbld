@@ -98,12 +98,9 @@ func bindAnswerCache(resp *dns.Msg, hostName string, question dns.Question) {
 	}
 
 	// Bind entry to the cache
-	//cache.GlobalCache.RLock()
-	// Bind entry to the cache
 	cache.GlobalCache.RLock()
 	defer cache.GlobalCache.RUnlock()
 	cache.GlobalCache.Store[cache.GenerateCacheKey(hostName, question.Qtype)] = entry
-	//cache.GlobalCache.RUnlock()
 }
 
 // GetQTypeAnswer - Get answer for allowed Qtype
@@ -135,6 +132,9 @@ func GetQTypeAnswer(hostName string, question dns.Question, upstreamAddr string)
 		}
 
 		if err == nil && len(respA.Answer) > 0 {
+			// Read from cache
+			cache.GlobalCache.RLock()
+			defer cache.GlobalCache.RUnlock()
 			// Add records to the corresponding cache fields
 			bindAnswerCache(respA, hostName, question)
 			return respA.Answer, nil
@@ -146,6 +146,9 @@ func GetQTypeAnswer(hostName string, question dns.Question, upstreamAddr string)
 		}
 
 		if err == nil && len(respAAAA.Answer) > 0 {
+			// Read from cache
+			cache.GlobalCache.RLock()
+			defer cache.GlobalCache.RUnlock()
 			bindAnswerCache(respAAAA, hostName, question)
 			return respAAAA.Answer, nil
 		}
@@ -155,6 +158,9 @@ func GetQTypeAnswer(hostName string, question dns.Question, upstreamAddr string)
 			return nil, err
 		}
 		if err == nil && len(respHTTPS.Answer) > 0 {
+			// Read from cache
+			cache.GlobalCache.RLock()
+			defer cache.GlobalCache.RUnlock()
 			bindAnswerCache(respHTTPS, hostName, question)
 			return respHTTPS.Answer, nil
 		}

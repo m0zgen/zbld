@@ -42,6 +42,10 @@ var mu sync.Mutex
 // handleCacheHit - Handle cache hit
 func entryInCache(m *dns.Msg, host string, question dns.Question) bool {
 
+	// Read from cache
+	cache.GlobalCache.RLock()
+	defer cache.GlobalCache.RUnlock()
+
 	if entry, found := cache.CheckCache(host, question.Qtype); found {
 		log.Println("Cache hit from handler for:", host)
 		m.Answer = append(m.Answer, entry.DnsMsg.Answer...)
