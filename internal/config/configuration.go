@@ -27,6 +27,7 @@ type Config struct {
 	IsDebug              bool     `yaml:"is_debug"`
 	PermanentEnabled     bool     `yaml:"permanent_enabled"`
 	PermanentWhitelisted string   `yaml:"permanent_whitelisted"`
+	PermanentFileURL     []string `yaml:"permanent_file_url"`
 	DNSforWhitelisted    []string `yaml:"permanent_dns_servers"`
 	UserHostsTemplate    string   `yaml:"user_hosts_template"`
 	UserHostsPermTmpl    string   `yaml:"user_hosts_permanent_template"`
