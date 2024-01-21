@@ -13,6 +13,10 @@ all other domains will be resolved to `0.0.0.0` as default.
 - You want to block ads and malware domains on your network.
 - zDNS can be used as `blackhole` or `abusehole` DNS server.
 
+> [!CAUTION]
+> If `inverse` option is enabled (see below), then zDNS will converted from zero trust server to blacklist server, where `hosts.txt` and host URLs
+> is a list of blocked domains.
+
 ## Features
 
 - Whitelisted domains from `hosts.txt` will be resolved to real IP address.
@@ -94,8 +98,8 @@ zDNS exposes Prometheus metrics on `/metrics` endpoint on defined port in `metri
 ## Permanent option
 If permanent mode is enabled, then domains from `hosts-permanent.txt` will be resolved to real IP address from `permanent_dns_servers`.
 
-**Note**
-Permanent lists and URLs will always be whitelisted and resolved to real IP address from `permanent_dns_servers`.
+> [!NOTE]  
+> Permanent lists and URLs will always be whitelisted and resolved to real IP address from `permanent_dns_servers`.
 
 ## Inverse Option
 This option convert zDNS from zero trust server to blacklist server, where `hosts.txt` and host URLs 
@@ -118,8 +122,8 @@ permanent_dns_servers:
   - "2.56.220.2:53"
 ```
 
-**Note**
-Permanent option is autonomous function with ignored `inverse` option. 
+> [!TIP]
+> Permanent option is autonomous function with ignored `inverse` option. 
 Domains from `hosts-permanent.txt` will always be resolved to real IP address from `permanent_dns_servers`.
 
 ## Specified config file
@@ -141,8 +145,9 @@ users/
     └── hosts.txt
 ```
 
-Then setup individual settings (like as ports or metrics) in config file for each user, then run `zdns` with `-config`,
-`-hosts`, `-permanent` options, for user1:
+> [!WARNING]  
+> Then setup individual settings (like as ports or metrics) in config file for each user, then run `zdns` with `-config`,
+> `-hosts`, `-permanent` options, for user1:
 
 ```shell
 ./zdns -config=users/user1/config.yml -hosts=users/user1/hosts.txt -permanent=users/user1/hosts-permanent.txt
