@@ -203,25 +203,21 @@ func handleDNSRequest(w dns.ResponseWriter, r *dns.Msg, regexMap map[string]*reg
 			// Check if host is in hosts.txt
 			// Resolve default hosts using upstream DNS for names not in hosts.txt
 			if (matching && !config.Inverse) || (hosts[_host] && !config.Inverse) {
-				log.Println("Resolving (local host):", _host, clientIP, upstreamDefault)
+				log.Println("Resolving with default upstream server (local host):", _host, clientIP, upstreamDefault)
 				getQTypeResponse(m, question, host, clientIP, upstreamDefault)
 			} else if permanentMatching {
 				// Get permanent upstreams
 				upstreamPermanet := upstreams.GetUpstreamServer(config.DNSforWhitelisted, config.BalancingStrategy)
+				log.Println("Resolving with permanent upstream server (permanent host):", _host, clientIP, upstreamPermanet)
 				getQTypeResponse(m, question, host, clientIP, upstreamPermanet)
-				if config.IsDebug {
-					log.Println("Resolving (permanent host):", _host, clientIP, upstreamPermanet)
-				}
 			} else {
 				if matching || hosts[_host] && !permanentHosts[_host] {
 					returnZeroIP(m, clientIP, host)
 				} else if config.Inverse {
 					//if !entryInCache(m, host, question) {
 					//upstreamDefault := upstreams.GetUpstreamServer(config.UpstreamDNSServers, config.BalancingStrategy)
+					log.Println("Resolving with default upstream server (inverse mode):", upstreamDefault)
 					getQTypeResponse(m, question, host, clientIP, upstreamDefault)
-					if config.IsDebug {
-						log.Println("Upstream server from inverse mode:", upstreamDefault)
-					}
 					//}
 				} else {
 					returnZeroIP(m, clientIP, host)
@@ -390,22 +386,26 @@ func main() {
 		multiWriter := io.MultiWriter(logFile, os.Stdout)
 		// Setups logger to use multiwriter
 		log.SetOutput(multiWriter)
-		log.Println("Logging enabled. Version:", config.ConfigVersion)
-		log.Println("Balancing strategy:", config.BalancingStrategy)
+		log.Printf("Logging: Enabled. Balancing Strategy: %s. Config Version: %s. \n", config.BalancingStrategy, config.ConfigVersion)
 	}
 
 	// Load hosts with lists package -------------------------------------------- //
 
 	// Pass config to lists package
 	lists.SetConfig(&config)
-	// Load hosts and regex with config interval (default 1h)
-	lists.LoadHostsWithInterval(config.HostsFile, ReloadInterval, regexMap, hosts)
-	lists.LoadHostsWithInterval(config.PermanentWhitelisted, ReloadInterval, regexMap, permanentHosts)
-	lists.LoadRegexWithInterval(config.PermanentWhitelisted, ReloadInterval, permanentRegexMap, permanentHosts)
+
 	// Load hosts.txt and bind regex patterns to regexMap in to lists package
 	if config.UseLocalHosts {
 		lists.LoadRegexWithInterval(config.HostsFile, ReloadInterval, regexMap, hosts)
+		lists.LoadRegexWithInterval(config.PermanentWhitelisted, ReloadInterval, permanentRegexMap, permanentHosts)
 	}
+	if config.UseRemoteHosts {
+		// Load hosts and regex with config interval (default 1h)
+		lists.LoadHostsWithInterval(config.HostsFile, ReloadInterval, regexMap, hosts)
+		//lists.LoadHostsWithInterval(config.PermanentWhitelisted, ReloadInterval, regexMap, permanentHosts)
+		lists.LoadPermanentHostsWithInterval(config.PermanentWhitelisted, ReloadInterval, permanentRegexMap, permanentHosts)
+	}
+
 	// Print more messages in to console and log for hosts files debug (after lists.LoadHosts)
 	if config.IsDebug {
 		fmt.Println("Hosts loaded:")
