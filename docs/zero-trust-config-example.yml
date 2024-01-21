@@ -1,0 +1,76 @@
+# Zero Trust Config Example
+# Upstreams settings
+# Load balancing strategies robin, strict. Default is robin
+load_balancing_strategy: "robin"
+# Default upstreams for not permanent domains
+upstream_dns_servers:
+  - "1.1.1.1:53"
+  - "8.8.8.8:53"
+# Upstream DNS servers for permanent whitelisted domains
+permanent_dns_servers:
+  - "95.85.95.85:53"
+  - "2.56.220.2:53"
+# Allowed query types
+allowed_qtypes:
+  - A
+  - AAAA
+  - HTTPS
+  - CNAME
+  - NS
+  - PTR
+
+# Hosts files settings
+# Default hosts file (if inverse false - allow, if inverse true - block)
+hosts_file: "hosts.txt"
+# Plain text and /regex/ hosts file supported
+hosts_file_url:
+  - "https://raw.githubusercontent.com/m0zgen/dns-hole/master/whitelist.txt"
+# Permanent - everything allowed
+permanent_whitelisted: "hosts-permanent.txt"
+permanent_file_url:
+  - "https://raw.githubusercontent.com/m0zgen/my-zdns/master/allow.txt"
+permanent_enabled: true
+# Remote and local host files reload interval
+reload_interval_duration: 1h
+# Enable/Disable local and remote hosts files loading
+use_local_hosts: true
+use_remote_hosts: true
+
+# DNS server settings
+# Default respond for blocked domains
+default_ip_address: "0.0.0.0"
+# Local DNS server port
+dns_port: 50000
+
+# Logging settings
+# Enable/Disable logging to file
+enable_logging: true
+log_file: "zdns.log"
+
+# Cache settings
+# If enable_cache is set to true, then the results of DNS queries will be cached
+cache_enabled: true
+# Stale cache entries will be removed after this many seconds
+cache_ttl_seconds: 3600
+
+# Prometheus Metrics
+metrics_enabled: true
+metrics_port: 40000
+
+# Users management
+user_hosts_template: "addits/templates/user-hosts.txt"
+user_hosts_permanent_template: "addits/templates/user-hosts-permanent.txt"
+user_config_template: "addits/templates/user-config.yml"
+users_dir: "users"
+users_log_dir: "users/logs"
+
+# Modes
+# Inverse settings
+# If inverse is set to true, then the hosts files from hosts_file, hosts_file_url will be treated as a blacklist
+# instead of a whitelist (if false). In short, if true, then the hosts file will be marked as blacklisted
+inverse: false
+# Extra messaging
+is_debug: false
+
+# Config version
+config_version: "0.2.3"
