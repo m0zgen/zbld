@@ -13,10 +13,6 @@ all other domains will be resolved to `0.0.0.0` as default.
 - You want to block ads and malware domains on your network.
 - zDNS can be used as `blackhole` or `abusehole` DNS server.
 
-> [!CAUTION]
-> If `inverse` option is enabled (see below), then zDNS will converted from zero trust server to blacklist server, where `hosts.txt` and host URLs
-> is a list of blocked domains.
-
 ## Features
 
 - Whitelisted domains from `hosts.txt` will be resolved to real IP address.
@@ -40,6 +36,10 @@ all other domains will be resolved to `0.0.0.0` as default.
 - Enable logging to file
 - Configurable log file name
 <!-- - Detecting DNS queries type: `A`, `AAAA`, `CNAME`, `TXT`, `MX`, `NS`, `PTR`, `SRV`, `SOA`, `CAA`, `ANY`. -->
+
+> [!CAUTION]
+> If `inverse` option is enabled (see below), then zDNS will converted from zero trust server to blacklist server, where `hosts.txt` and host URLs
+> is a list of blocked domains.
 
 ## Usage
 
