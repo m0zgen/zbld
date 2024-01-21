@@ -87,4 +87,4 @@ inverse: true
 is_debug: false
 
 # Config version
-config_version: "0.2.3"
+config_version: "0.2.4"
