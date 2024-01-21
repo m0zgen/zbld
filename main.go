@@ -43,9 +43,6 @@ var mu sync.Mutex
 func entryInCache(m *dns.Msg, host string, question dns.Question) bool {
 
 	// Read from cache
-	cache.GlobalCache.RLock()
-	defer cache.GlobalCache.RUnlock()
-
 	if entry, found := cache.CheckCache(host, question.Qtype); found {
 		log.Println("Cache hit from handler for:", host)
 		m.Answer = append(m.Answer, entry.DnsMsg.Answer...)
@@ -304,7 +301,6 @@ func main() {
 	var hostsFile string
 	var permanentFile string
 	var wg = new(sync.WaitGroup)
-	var shutdownChan = make(chan struct{})
 
 	// Parse command line arguments
 	addUserFlag := flag.String("adduser", "", "Username for configuration")
@@ -429,13 +425,6 @@ func main() {
 		udpServer := &dns.Server{Addr: fmt.Sprintf(":%d", config.DNSPort), Net: "udp"}
 		dns.HandleFunc(".", func(w dns.ResponseWriter, r *dns.Msg) {
 			handleDNSRequest(w, r, regexMap)
-			//select {
-			//case <-shutdownChan:
-			//	log.Println("Shutting down UDP server.")
-			//	return
-			//default:
-			//	handleDNSRequest(w, r, regexMap)
-			//}
 		})
 
 		log.Printf("DNS server is listening on :%d (UDP)...\n", config.DNSPort)
@@ -453,13 +442,6 @@ func main() {
 		tcpServer := &dns.Server{Addr: fmt.Sprintf(":%d", config.DNSPort), Net: "tcp"}
 		dns.HandleFunc(".", func(w dns.ResponseWriter, r *dns.Msg) {
 			handleDNSRequest(w, r, regexMap)
-			//select {
-			//case <-shutdownChan:
-			//	log.Println("Shutting down UDP server.")
-			//	return
-			//default:
-			//	handleDNSRequest(w, r, regexMap)
-			//}
 		})
 
 		log.Printf("DNS server is listening on :%d (TCP)...\n", config.DNSPort)
@@ -499,11 +481,6 @@ func main() {
 	exitcode := <-exitchnl
 
 	// End of program ----------------------------------------------------------- //
-	// Let the servers run for a while (e.g., 10 seconds)
-	time.Sleep(10 * time.Second)
-
-	// Send a signal to shut down the servers
-	close(shutdownChan)
 
 	// Waiting for all goroutines to complete and ensure exit
 	wg.Wait()

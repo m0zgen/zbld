@@ -7,6 +7,7 @@ import (
 	"net"
 	"time"
 	"zdns/internal/cache"
+	prom "zdns/internal/prometheus"
 )
 
 // Local functions ---------------------------------------------------------- //
@@ -109,14 +110,14 @@ func GetQTypeAnswer(hostName string, question dns.Question, upstreamAddr string)
 	// NOTE: Need enable if this func will calls from another func (except DNS handler)
 	//key := cache.GenerateCacheKey(hostName, question.Qtype)
 	// Check if the result is in the cache
-	////cache.GlobalCache.RLock()
-	//if entry, found := cache.CheckCache(hostName, question.Qtype); found {
-	//	log.Printf("Cache hit for %s\n", hostName)
-	//	prom.CacheHitResponseTotal.Inc()
-	//	defer cache.CheckAndDeleteExpiredEntries()
-	//	return entry.DnsMsg.Answer, nil
-	//}
-	////cache.GlobalCache.RUnlock()
+	cache.GlobalCache.RLock()
+	if entry, found := cache.CheckCache(hostName, question.Qtype); found {
+		log.Printf("Cache hit for %s\n", hostName)
+		prom.CacheHitResponseTotal.Inc()
+		defer cache.CheckAndDeleteExpiredEntries()
+		return entry.DnsMsg.Answer, nil
+	}
+	cache.GlobalCache.RUnlock()
 
 	client := dns.Client{}
 	m := &dns.Msg{}
