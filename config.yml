@@ -50,11 +50,6 @@ reload_interval_duration: 1h
 use_local_hosts: true
 use_remote_hosts: true
 
-# Inverse settings
-# If inverse is set to true, then the hosts files from hosts_file, hosts_file_url will be treated as a blacklist
-# instead of a whitelist (if false). In short, if true, then the hosts file will be marked as blacklisted
-inverse: true
-
 # DNS server settings
 # Default respond for blocked domains
 default_ip_address: "0.0.0.0"
@@ -65,8 +60,6 @@ dns_port: 50000
 # Enable/Disable logging to file
 enable_logging: true
 log_file: "zdns.log"
-# Extra messaging
-is_debug: false
 
 # Cache settings
 # If enable_cache is set to true, then the results of DNS queries will be cached
@@ -84,6 +77,14 @@ user_hosts_permanent_template: "addits/templates/user-hosts-permanent.txt"
 user_config_template: "addits/templates/user-config.yml"
 users_dir: "users"
 users_log_dir: "users/logs"
+
+# Modes
+# Inverse settings
+# If inverse is set to true, then the hosts files from hosts_file, hosts_file_url will be treated as a blacklist
+# instead of a whitelist (if false). In short, if true, then the hosts file will be marked as blacklisted
+inverse: true
+# Extra messaging
+is_debug: false
 
 # Config version
 config_version: "0.2.3"
