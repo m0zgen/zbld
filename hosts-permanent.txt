@@ -6,6 +6,5 @@
 # /(^|^.*\.)sys-adm.(in)$/
 
 # [ Domain rules ] #
-bitbucket.org
 egov.kz
 kaspi.kz
