@@ -98,9 +98,12 @@ func bindAnswerCache(resp *dns.Msg, hostName string, question dns.Question) {
 	}
 
 	// Bind entry to the cache
+	//cache.GlobalCache.RLock()
+	// Bind entry to the cache
 	cache.GlobalCache.RLock()
+	defer cache.GlobalCache.RUnlock()
 	cache.GlobalCache.Store[cache.GenerateCacheKey(hostName, question.Qtype)] = entry
-	cache.GlobalCache.RUnlock()
+	//cache.GlobalCache.RUnlock()
 }
 
 // GetQTypeAnswer - Get answer for allowed Qtype

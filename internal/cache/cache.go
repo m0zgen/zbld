@@ -47,13 +47,20 @@ func (entry *CacheEntry) UpdateCreationTimeWithTTL(ttl time.Duration) {
 // CheckAndDeleteExpiredEntries - Check and delete expired TTL entries from cache
 func CheckAndDeleteExpiredEntries() {
 	// Check and delete expired TTL entries from cache
-	GlobalCache.mu.Lock()
-	defer GlobalCache.mu.Unlock()
+	GlobalCache.RLock()
+	defer GlobalCache.RUnlock()
+
+	keysToDelete := []string{}
 
 	for key, entry := range GlobalCache.Store {
 		if time.Since(entry.CreationTime) > entry.TTL {
-			delete(GlobalCache.Store, key)
+			keysToDelete = append(keysToDelete, key)
 		}
+	}
+
+	// Delete after iteration
+	for _, key := range keysToDelete {
+		delete(GlobalCache.Store, key)
 	}
 }
 
@@ -63,8 +70,8 @@ func CheckAndDeleteExpiredEntries() {
 func CheckCache(domain string, recordType uint16) (*CacheEntry, bool) {
 	key := GenerateCacheKey(domain, recordType)
 
-	GlobalCache.mu.RLock()
-	defer GlobalCache.mu.RUnlock()
+	GlobalCache.RLock()
+	defer GlobalCache.RUnlock()
 
 	entry, ok := GlobalCache.Store[key]
 	return &entry, ok
