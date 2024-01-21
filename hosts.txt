@@ -1,11 +1,12 @@
 # [ Regex rules ] #
 /(^|^.*\.)openbld.(net)$/
 /(^|^.*\.)sys-adm.(in)$/
-/(^|^.*\.)sysconf.(in)$/
+/(^|^.*\.)sysconf.(io)$/
 
 # [ Domain rules ] #
 github.com
 egov.kz
+ps.kz
 
 # If add // allow all
 # //
