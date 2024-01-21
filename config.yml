@@ -1,6 +1,15 @@
+# Upstreams settings
+# Load balancing strategies robin, strict. Default is robin
+load_balancing_strategy: "robin"
+# Default upstreams for not permanent domains
 upstream_dns_servers:
   - "1.1.1.1:53"
   - "8.8.8.8:53"
+# Upstream DNS servers for permanent whitelisted domains
+permanent_dns_servers:
+  - "95.85.95.85:53"
+  - "2.56.220.2:53"
+# Allowed query types
 allowed_qtypes:
   - A
   - AAAA
@@ -23,44 +32,58 @@ allowed_qtypes:
 #  - AXFR
 #  - IXFR
 #  - OPT
-# Load balancing strategies robin, strict. Default is robin
-load_balancing_strategy: "robin"
+
+# Hosts files settings
+# Default hosts file (if inverse false - allow, if inverse true - block)
 hosts_file: "hosts.txt"
-use_local_hosts: true
-use_remote_hosts: true
 # Plain text and /regex/ hosts file supported
 hosts_file_url:
-  - "https://raw.githubusercontent.com/m0zgen/dns-hole/master/whitelist.txt"
+  - "https://raw.githubusercontent.com/m0zgen/my-zdns/master/block.txt"
+# Permanent - everything allowed
+permanent_whitelisted: "hosts-permanent.txt"
+permanent_file_url:
+  - "https://raw.githubusercontent.com/m0zgen/my-zdns/master/allow.txt"
+permanent_enabled: true
 # Remote and local host files reload interval
 reload_interval_duration: 1h
-# Default respond for restricted domains
-default_ip_address: "0.0.0.0"
-dns_port: 50000
-enable_logging: true
-log_file: "zdns.log"
+# Enable/Disable local and remote hosts files loading
+use_local_hosts: true
+use_remote_hosts: true
+
+# Inverse settings
 # If inverse is set to true, then the hosts file will be treated as a blacklist
 # instead of a whitelist. In short, if true, then the hosts file will be marked as blacklisted
-inverse: false
+inverse: true
+
+# DNS server settings
+# Default respond for blocked domains
+default_ip_address: "0.0.0.0"
+# Local DNS server port
+dns_port: 50000
+
+# Logging settings
+# Enable/Disable logging to file
+enable_logging: true
+log_file: "zdns.log"
+# Extra messaging
+is_debug: false
+
+# Cache settings
 # If enable_cache is set to true, then the results of DNS queries will be cached
 cache_enabled: true
 # Stale cache entries will be removed after this many seconds
 cache_ttl_seconds: 3600
-# Metrics enabled
+
+# Prometheus Metrics
 metrics_enabled: true
 metrics_port: 40000
-is_debug: false
-# Extra options
-permanent_enabled: true
-permanent_whitelisted: "hosts-permanent.txt"
-# Upstream DNS servers for permanent whitelisted domains
-permanent_dns_servers:
-  - "95.85.95.85:53"
-  - "2.56.220.2:53"
-# Config version
-config_version: "0.2.3"
+
 # Users management
 user_hosts_template: "addits/templates/user-hosts.txt"
 user_hosts_permanent_template: "addits/templates/user-hosts-permanent.txt"
 user_config_template: "addits/templates/user-config.yml"
 users_dir: "users"
 users_log_dir: "users/logs"
+
+# Config version
+config_version: "0.2.3"
