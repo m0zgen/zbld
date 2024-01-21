@@ -7,7 +7,6 @@ import (
 	"net"
 	"time"
 	"zdns/internal/cache"
-	prom "zdns/internal/prometheus"
 )
 
 // Local functions ---------------------------------------------------------- //
@@ -73,7 +72,7 @@ func hasSOARecords(response *dns.Msg) bool {
 // External functions ------------------------------------------------------- //
 
 // bindAnswerCache - Bind DNS mdg answer to the cache
-func bindAnswerCache(resp *dns.Msg, hostName string, question dns.Question) {
+func bindAnswerCache(resp *dns.Msg, key string) {
 
 	// Create cache entry
 	entry := cache.CacheEntry{
@@ -99,9 +98,38 @@ func bindAnswerCache(resp *dns.Msg, hostName string, question dns.Question) {
 	}
 
 	// Bind entry to the cache
-	cache.GlobalCache.RLock()
-	defer cache.GlobalCache.RUnlock()
-	cache.GlobalCache.Store[cache.GenerateCacheKey(hostName, question.Qtype)] = entry
+	//cache.GlobalCache.RLock()
+	//defer cache.GlobalCache.RUnlock()
+	//cache.WriteCache(key, entry)
+	//cache.WriteToCache(key, entry)
+	//cache.GlobalCache.Store[key)] = entry
+}
+
+func createCacheEntryFromResponse(resp *dns.Msg) *cache.CacheEntry {
+	// Create cache entry
+	entry := &cache.CacheEntry{
+		IPv4:         []net.IP{},
+		IPv6:         []net.IP{},
+		CreationTime: time.Now(),
+		TTL:          time.Duration(resp.Answer[0].Header().Ttl) * time.Second,
+		DnsMsg:       resp,
+	}
+
+	// Add records to the corresponding fields
+	for _, answer := range resp.Answer {
+		switch answer.Header().Rrtype {
+		case dns.TypeA:
+			if a, ok := answer.(*dns.A); ok {
+				entry.IPv4 = append(entry.IPv4, a.A)
+			}
+		case dns.TypeAAAA:
+			if aaaa, ok := answer.(*dns.AAAA); ok {
+				entry.IPv6 = append(entry.IPv6, aaaa.AAAA)
+			}
+		}
+	}
+
+	return entry
 }
 
 // GetQTypeAnswer - Get answer for allowed Qtype
@@ -110,20 +138,34 @@ func GetQTypeAnswer(hostName string, question dns.Question, upstreamAddr string)
 	// NOTE: Need enable if this func will calls from another func (except DNS handler)
 	//key := cache.GenerateCacheKey(hostName, question.Qtype)
 	// Check if the result is in the cache
-	cache.GlobalCache.RLock()
-	if entry, found := cache.CheckCache(hostName, question.Qtype); found {
-		log.Printf("Cache hit for %s\n", hostName)
-		prom.CacheHitResponseTotal.Inc()
-		defer cache.CheckAndDeleteExpiredEntries()
-		return entry.DnsMsg.Answer, nil
-	}
-	cache.GlobalCache.RUnlock()
+	//cache.GlobalCache.RLock()
+	//if entry, found := cache.CheckCache(hostName, question.Qtype); found {
+	//	log.Printf("Cache hit for %s\n", hostName)
+	//	prom.CacheHitResponseTotal.Inc()
+	//	defer cache.CheckAndDeleteExpiredEntries()
+	//	return entry.DnsMsg.Answer, nil
+	//}
+	//cache.GlobalCache.RUnlock()
 
 	client := dns.Client{}
 	m := &dns.Msg{}
 	m.SetQuestion(dns.Fqdn(hostName), question.Qtype)
-
 	var records []string
+
+	//cache.GlobalCache.RLock()
+	key := cache.GenerateCacheKey(hostName, question.Qtype)
+	entry, ok := cache.CheckCache(key)
+	if ok {
+		m.Answer = append(m.Answer, entry.DnsMsg.Answer...)
+
+		if time.Since(entry.CreationTime) > entry.TTL {
+			cache.GlobalCache.RLock()
+			delete(cache.GlobalCache.Store, key)
+			cache.GlobalCache.RUnlock()
+		}
+		return m.Answer, nil
+	}
+	//cache.GlobalCache.RUnlock()
 
 	switch question.Qtype {
 	case dns.TypeA:
@@ -131,13 +173,12 @@ func GetQTypeAnswer(hostName string, question dns.Question, upstreamAddr string)
 		if err != nil {
 			return nil, err
 		}
-
 		if err == nil && len(respA.Answer) > 0 {
-			// Read from cache
-			cache.GlobalCache.RLock()
-			defer cache.GlobalCache.RUnlock()
+			// Entry not found, add it to the cache
+			newEntry := createCacheEntryFromResponse(respA)
+			cache.WriteToCache(key, newEntry)
 			// Add records to the corresponding cache fields
-			bindAnswerCache(respA, hostName, question)
+			//bindAnswerCache(respA, hostName, question)
 			return respA.Answer, nil
 		}
 	case dns.TypeAAAA:
@@ -147,10 +188,9 @@ func GetQTypeAnswer(hostName string, question dns.Question, upstreamAddr string)
 		}
 
 		if err == nil && len(respAAAA.Answer) > 0 {
-			// Read from cache
-			cache.GlobalCache.RLock()
-			defer cache.GlobalCache.RUnlock()
-			bindAnswerCache(respAAAA, hostName, question)
+			// Entry not found, add it to the cache
+			newEntry := createCacheEntryFromResponse(respAAAA)
+			cache.WriteToCache(key, newEntry)
 			return respAAAA.Answer, nil
 		}
 	case dns.TypeHTTPS:
@@ -158,11 +198,11 @@ func GetQTypeAnswer(hostName string, question dns.Question, upstreamAddr string)
 		if err != nil {
 			return nil, err
 		}
+
 		if err == nil && len(respHTTPS.Answer) > 0 {
-			// Read from cache
-			cache.GlobalCache.RLock()
-			defer cache.GlobalCache.RUnlock()
-			bindAnswerCache(respHTTPS, hostName, question)
+			// Entry not found, add it to the cache
+			newEntry := createCacheEntryFromResponse(respHTTPS)
+			cache.WriteToCache(key, newEntry)
 			return respHTTPS.Answer, nil
 		}
 	case dns.TypeCNAME:

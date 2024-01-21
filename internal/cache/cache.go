@@ -20,12 +20,12 @@ type CacheEntry struct {
 // Cache - Structure for storing cache entries
 type Cache struct {
 	mu    sync.RWMutex
-	Store map[string]CacheEntry
+	Store map[string]*CacheEntry
 }
 
 // GlobalCache - Global cache instance
 var GlobalCache = Cache{
-	Store: make(map[string]CacheEntry),
+	Store: make(map[string]*CacheEntry),
 }
 
 // RLock - Mutex lock
@@ -47,8 +47,8 @@ func (entry *CacheEntry) UpdateCreationTimeWithTTL(ttl time.Duration) {
 // CheckAndDeleteExpiredEntries - Check and delete expired TTL entries from cache
 func CheckAndDeleteExpiredEntries() {
 	// Check and delete expired TTL entries from cache
-	GlobalCache.RLock()
-	defer GlobalCache.RUnlock()
+	//GlobalCache.RLock()
+	//defer GlobalCache.RUnlock()
 
 	keysToDelete := []string{}
 
@@ -67,14 +67,24 @@ func CheckAndDeleteExpiredEntries() {
 // Caching for QTypes
 
 // CheckCache - Check if an entry exists in the cache
-func CheckCache(domain string, recordType uint16) (*CacheEntry, bool) {
-	key := GenerateCacheKey(domain, recordType)
+func CheckCache(key string) (*CacheEntry, bool) {
+	GlobalCache.RLock()
+	defer GlobalCache.RUnlock()
+	//key := GenerateCacheKey(domain, recordType)
+	entry, ok := GlobalCache.Store[key]
+	return entry, ok
+}
 
+func WriteToCache(key string, entry *CacheEntry) {
+	// Lock for write
 	GlobalCache.RLock()
 	defer GlobalCache.RUnlock()
 
-	entry, ok := GlobalCache.Store[key]
-	return &entry, ok
+	// Write entry to cache
+	GlobalCache.Store[key] = entry
+
+	// Check and delete expired TTL entries from cache
+	//CheckAndDeleteExpiredEntries()
 }
 
 // GenerateCacheKey - Generate a unique cache key based on domain and record type

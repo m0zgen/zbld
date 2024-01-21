@@ -71,7 +71,8 @@ func loadHosts(filename string, useRemote bool, urls []string, regexMap map[stri
 			}
 		}(file)
 
-		mu.Lock()
+		//mu.Lock()
+		//defer mu.Unlock()
 		scanner := bufio.NewScanner(file)
 		for scanner.Scan() {
 			host := strings.ToLower(scanner.Text())
@@ -79,7 +80,6 @@ func loadHosts(filename string, useRemote bool, urls []string, regexMap map[stri
 				targetMap[host] = true
 			}
 		}
-		mu.Unlock()
 
 		if err := scanner.Err(); err != nil {
 			return err
@@ -133,7 +133,7 @@ func loadHosts(filename string, useRemote bool, urls []string, regexMap map[stri
 			}
 			//
 
-			mu.Lock()
+			//mu.Lock()
 			scanner := bufio.NewScanner(response.Body)
 			for scanner.Scan() {
 				host := strings.ToLower(scanner.Text())
@@ -141,7 +141,7 @@ func loadHosts(filename string, useRemote bool, urls []string, regexMap map[stri
 					targetMap[host] = true
 				}
 			}
-			mu.Unlock()
+			//mu.Unlock()
 
 			if err := scanner.Err(); err != nil {
 				return err
@@ -171,7 +171,8 @@ func loadHostsAndRegex(filename string, regexMap map[string]*regexp.Regexp, targ
 		}
 	}(file)
 
-	mu.Lock()
+	//mu.Lock()
+	//defer mu.Unlock()
 	//hosts = make(map[string]bool)
 	scanner := bufio.NewScanner(file)
 	for scanner.Scan() {
@@ -198,7 +199,7 @@ func loadHostsAndRegex(filename string, regexMap map[string]*regexp.Regexp, targ
 			}
 		}
 	}
-	mu.Unlock()
+	//mu.Unlock()
 
 	if err := scanner.Err(); err != nil {
 		return err
@@ -215,11 +216,13 @@ func LoadHostsWithInterval(filename string, interval time.Duration, regexMap map
 	// Goroutine for periodic lists reload
 	go func() {
 		for {
+			mu.Lock()
 			//log.Println("Reloading hosts or URL file:", hostsFileURL)
 			if err := loadHosts(filename, useRemoteHosts, hostsFileURL, regexMap, targetMap); err != nil {
 				log.Fatalf("Error loading hosts file: %v", err)
 			}
 			prom.ReloadHostsTotal.Inc()
+			mu.Unlock()
 			time.Sleep(interval)
 		}
 	}()
@@ -231,11 +234,13 @@ func LoadPermanentHostsWithInterval(filename string, interval time.Duration, reg
 	// Goroutine for periodic lists reload
 	go func() {
 		for {
+			mu.Lock()
 			//log.Println("Reloading permanent URL file:", permanentFileURL)
 			if err := loadHosts(filename, useRemoteHosts, permanentFileURL, regexMap, targetMap); err != nil {
 				log.Fatalf("Error loading permanent hosts file: %v", err)
 			}
 			prom.ReloadHostsTotal.Inc()
+			mu.Unlock()
 			time.Sleep(interval)
 		}
 	}()
@@ -247,11 +252,13 @@ func LoadRegexWithInterval(filename string, interval time.Duration, regexMap map
 	// Goroutine for periodic lists reload
 	go func() {
 		for {
+			mu.Lock()
 			log.Println("Loading local file:", filename)
 			if err := loadHostsAndRegex(filename, regexMap, targetMap); err != nil {
 				log.Fatalf("Error loading hosts and regex file: %v", err)
 			}
 			prom.ReloadHostsTotal.Inc()
+			mu.Unlock()
 			time.Sleep(interval)
 		}
 	}()

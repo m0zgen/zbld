@@ -42,16 +42,24 @@ var mu sync.Mutex
 // handleCacheHit - Handle cache hit
 func entryInCache(m *dns.Msg, host string, question dns.Question) bool {
 
-	// Read from cache
-	if entry, found := cache.CheckCache(host, question.Qtype); found {
+	key := cache.GenerateCacheKey(host, question.Qtype)
+	entry, ok := cache.CheckCache(key)
+	if ok {
 		log.Println("Cache hit from handler for:", host)
 		m.Answer = append(m.Answer, entry.DnsMsg.Answer...)
-		if config.IsDebug {
-			log.Printf("Answer: %s\n", entry.DnsMsg.Answer)
-		}
-		defer prom.CacheHitResponseTotal.Inc()
 		return true
 	}
+
+	// Read from cache
+	//if entry, found := cache.CheckCache(host, question.Qtype); found {
+	//	log.Println("Cache hit from handler for:", host)
+	//	m.Answer = append(m.Answer, entry.DnsMsg.Answer...)
+	//	if config.IsDebug {
+	//		log.Printf("Answer: %s\n", entry.DnsMsg.Answer)
+	//	}
+	//	defer prom.CacheHitResponseTotal.Inc()
+	//	return true
+	//}
 	return false
 }
 
@@ -148,16 +156,18 @@ func getQTypeResponse(m *dns.Msg, question dns.Question, host string, clientIP n
 			log.Println("Creating answer for allowed Qtype:", question.Qtype)
 		}
 
-		rAnswer, _ := queries.GetQTypeAnswer(host, question, upstreamAd)
-		if rAnswer != nil {
-			if config.IsDebug {
-				log.Printf("Answer: %s\n", rAnswer)
+		if !entryInCache(m, host, question) {
+			rAnswer, _ := queries.GetQTypeAnswer(host, question, upstreamAd)
+			if rAnswer != nil {
+				if config.IsDebug {
+					log.Printf("Answer: %s\n", rAnswer)
+				}
+				m.Answer = append(m.Answer, rAnswer...)
+				prom.SuccessfulResolutionsTotal.Inc()
+			} else {
+				log.Println("Answer is empty set response code to (NXDOMAIN) for:", host, dns.RcodeNameError)
+				setResponseCode(m, dns.RcodeNameError)
 			}
-			m.Answer = append(m.Answer, rAnswer...)
-			prom.SuccessfulResolutionsTotal.Inc()
-		} else {
-			log.Println("Answer is empty set response code to (NXDOMAIN) for:", host, dns.RcodeNameError)
-			setResponseCode(m, dns.RcodeNameError)
 		}
 
 	} else {
@@ -224,8 +234,6 @@ func handleDNSRequest(w dns.ResponseWriter, r *dns.Msg, regexMap map[string]*reg
 					returnZeroIP(m, clientIP, host)
 				}
 			}
-		} else {
-			cache.CheckAndDeleteExpiredEntries()
 		}
 		//mu.Unlock()
 	}
@@ -435,7 +443,7 @@ func main() {
 	}()
 
 	// Run DNS server for TCP requests
-	wg.Add(1)
+	//wg.Add(1)
 	go func() {
 		defer wg.Done()
 
