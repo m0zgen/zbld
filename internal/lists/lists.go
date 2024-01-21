@@ -18,6 +18,7 @@ var mu sync.RWMutex
 var useLocalHosts bool
 var useRemoteHosts bool
 var hostsFileURL []string
+var permanentFileURL []string
 var isDebug bool
 
 // Config setter -------------------------------------------------------- //
@@ -29,6 +30,7 @@ func SetConfig(cfg *configuration.Config) {
 	useLocalHosts = cfg.UseLocalHosts
 	useRemoteHosts = cfg.UseRemoteHosts
 	hostsFileURL = cfg.HostsFileURL
+	permanentFileURL = cfg.PermanentFileURL
 	isDebug = cfg.IsDebug
 	// ...
 }
@@ -51,7 +53,7 @@ func IsMatching(host string, regexMap map[string]*regexp.Regexp) bool {
 // loadHosts - Load hosts from file and bind maps
 func loadHosts(filename string, useRemote bool, urls []string, regexMap map[string]*regexp.Regexp, targetMap map[string]bool) error {
 
-	var downloadedFile = "downloaded_" + filename
+	var downloadedFile = strings.TrimRight(filename, ".txt") + "_downloaded.txt"
 
 	if useLocalHosts {
 		//log.Printf("Loading local hosts from %s\n", filename)
@@ -73,7 +75,9 @@ func loadHosts(filename string, useRemote bool, urls []string, regexMap map[stri
 		scanner := bufio.NewScanner(file)
 		for scanner.Scan() {
 			host := strings.ToLower(scanner.Text())
-			targetMap[host] = true
+			if len(host) > 0 || !strings.Contains(host, "#") {
+				targetMap[host] = true
+			}
 		}
 		mu.Unlock()
 
@@ -84,7 +88,9 @@ func loadHosts(filename string, useRemote bool, urls []string, regexMap map[stri
 	}
 
 	// Download remote host files
-	if useRemote && !strings.Contains(filename, "permanent") {
+	//if useRemote && !strings.Contains(filename, "permanent") {
+	if useRemote {
+
 		// Check if file exists
 		if _, err := os.Stat(downloadedFile); err == nil {
 			// If file exists, clear its contents
@@ -94,7 +100,7 @@ func loadHosts(filename string, useRemote bool, urls []string, regexMap map[stri
 		}
 
 		for _, url := range urls {
-			log.Printf("Loading remote file from %s\n", url)
+			log.Println("Loading remote file:", url)
 			response, err := http.Get(url)
 			if err != nil {
 				return err
@@ -131,7 +137,9 @@ func loadHosts(filename string, useRemote bool, urls []string, regexMap map[stri
 			scanner := bufio.NewScanner(response.Body)
 			for scanner.Scan() {
 				host := strings.ToLower(scanner.Text())
-				targetMap[host] = true
+				if len(host) > 0 || !strings.Contains(host, "#") {
+					targetMap[host] = true
+				}
 			}
 			mu.Unlock()
 
@@ -179,11 +187,15 @@ func loadHostsAndRegex(filename string, regexMap map[string]*regexp.Regexp, targ
 			if err != nil {
 				return err
 			}
-			regexMap[regexPattern] = regex
+			if len(entry) > 0 || !strings.Contains(entry, "#") {
+				regexMap[regexPattern] = regex
+			}
 		} else {
 			// Regular host entry
-			host := strings.ToLower(entry)
-			targetMap[host] = true
+			if len(entry) > 0 || !strings.Contains(entry, "#") {
+				host := strings.ToLower(entry)
+				targetMap[host] = true
+			}
 		}
 	}
 	mu.Unlock()
@@ -203,9 +215,25 @@ func LoadHostsWithInterval(filename string, interval time.Duration, regexMap map
 	// Goroutine for periodic lists reload
 	go func() {
 		for {
-			log.Println("Reloading hosts or URL file:", filename)
+			//log.Println("Reloading hosts or URL file:", hostsFileURL)
 			if err := loadHosts(filename, useRemoteHosts, hostsFileURL, regexMap, targetMap); err != nil {
 				log.Fatalf("Error loading hosts file: %v", err)
+			}
+			prom.ReloadHostsTotal.Inc()
+			time.Sleep(interval)
+		}
+	}()
+}
+
+// LoadPermanentHostsWithInterval - LoadHosts with interval
+func LoadPermanentHostsWithInterval(filename string, interval time.Duration, regexMap map[string]*regexp.Regexp, targetMap map[string]bool) {
+
+	// Goroutine for periodic lists reload
+	go func() {
+		for {
+			//log.Println("Reloading permanent URL file:", permanentFileURL)
+			if err := loadHosts(filename, useRemoteHosts, permanentFileURL, regexMap, targetMap); err != nil {
+				log.Fatalf("Error loading permanent hosts file: %v", err)
 			}
 			prom.ReloadHostsTotal.Inc()
 			time.Sleep(interval)
@@ -219,7 +247,7 @@ func LoadRegexWithInterval(filename string, interval time.Duration, regexMap map
 	// Goroutine for periodic lists reload
 	go func() {
 		for {
-			//log.Printf("Loading regex %s\n", filename)
+			log.Println("Loading local file:", filename)
 			if err := loadHostsAndRegex(filename, regexMap, targetMap); err != nil {
 				log.Fatalf("Error loading hosts and regex file: %v", err)
 			}

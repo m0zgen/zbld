@@ -1,3 +1,4 @@
+# Zero Trust Config Example
 # Upstreams settings
 # Load balancing strategies robin, strict. Default is robin
 load_balancing_strategy: "robin"
@@ -17,28 +18,13 @@ allowed_qtypes:
   - CNAME
   - NS
   - PTR
-#  - MX
-#  - SRV
-#  - SOA
-#  - TXT
-# Not implemented yet
-#  - NAPTR
-#  - DS
-#  - DNSKEY
-#  - RRSIG
-#  - CAA
-#  - TLSA
-#  - ANY
-#  - AXFR
-#  - IXFR
-#  - OPT
 
 # Hosts files settings
 # Default hosts file (if inverse false - allow, if inverse true - block)
 hosts_file: "hosts.txt"
 # Plain text and /regex/ hosts file supported
 hosts_file_url:
-  - "https://raw.githubusercontent.com/m0zgen/my-zdns/master/block.txt"
+  - "https://raw.githubusercontent.com/m0zgen/dns-hole/master/whitelist.txt"
 # Permanent - everything allowed
 permanent_whitelisted: "hosts-permanent.txt"
 permanent_file_url:
@@ -82,7 +68,7 @@ users_log_dir: "users/logs"
 # Inverse settings
 # If inverse is set to true, then the hosts files from hosts_file, hosts_file_url will be treated as a blacklist
 # instead of a whitelist (if false). In short, if true, then the hosts file will be marked as blacklisted
-inverse: true
+inverse: false
 # Extra messaging
 is_debug: false
 

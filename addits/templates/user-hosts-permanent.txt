@@ -4,7 +4,7 @@
 /(^|^.*\.)yandex\.(ru|com|net|kz)$/
 /(^|^.*\.)openbld.(net)$/
 /(^|^.*\.)sys-adm.(in)$/
-/(^|^.*\.)sysconf.(in)$/
+/(^|^.*\.)sysconf.(io)$/
 
 # [ Domain rules ] #
 bitbucket.org
