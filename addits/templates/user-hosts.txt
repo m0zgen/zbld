@@ -3,6 +3,3 @@
 
 # [ Domain rules ] #
 example.com
-
-# If add // allow all
-# //
