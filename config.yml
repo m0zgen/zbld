@@ -51,8 +51,8 @@ use_local_hosts: true
 use_remote_hosts: true
 
 # Inverse settings
-# If inverse is set to true, then the hosts file will be treated as a blacklist
-# instead of a whitelist. In short, if true, then the hosts file will be marked as blacklisted
+# If inverse is set to true, then the hosts files from hosts_file, hosts_file_url will be treated as a blacklist
+# instead of a whitelist (if false). In short, if true, then the hosts file will be marked as blacklisted
 inverse: true
 
 # DNS server settings
