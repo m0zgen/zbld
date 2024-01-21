@@ -91,6 +91,19 @@ is_debug: false
 
 zDNS exposes Prometheus metrics on `/metrics` endpoint on defined port in `metrics_port` config option.
 
+## Permanent option
+If permanent mode is enabled, then domains from `hosts-permanent.txt` will be resolved to real IP address from `permanent_dns_servers`.
+
+**Note**
+Permanent lists and URLs will always be whitelisted and resolved to real IP address from `permanent_dns_servers`.
+
+## Inverse Option
+This option convert zDNS from zero trust server to blacklist server, where `hosts.txt` and host URLs 
+is a list of blocked domains.
+
+[!IMPORTANT]
+Allowed permanent lists has priority over blocked
+
 ## Extra options
 
 Permanent whitelist domains from `hosts-permanent.txt` will be resolved with configured DNS servers in `permanent_dns_servers` option.
