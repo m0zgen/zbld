@@ -211,6 +211,19 @@ func GetQTypeAnswer(hostName string, question dns.Question, upstreamAddr string)
 		}
 
 		if err == nil && len(respHTTPS.Answer) > 0 {
+
+			if respHTTPS.Answer[0].Header().Rrtype == dns.TypeCNAME {
+				log.Println("CNAME record found for:", hostName)
+				m.SetQuestion(respHTTPS.Answer[0].Header().Name, dns.TypeA)
+				respConvCN, _, errConv := client.Exchange(m, upstreamAddr)
+				if errConv != nil {
+					log.Printf("Failed to get TypeA response for %s. Error: %v\n", hostName, errConv)
+					return nil, errConv
+				}
+				return respConvCN.Answer, nil
+
+			}
+
 			// Entry not found, add it to the cache
 			newEntry := createCacheEntryFromResponse(respHTTPS)
 			cache.WriteToCache(key, newEntry)

@@ -174,9 +174,9 @@ func getQTypeResponse(m *dns.Msg, question dns.Question, host string, clientIP n
 				m.Answer = append(m.Answer, rAnswer...)
 				prom.SuccessfulResolutionsTotal.Inc()
 			} else {
-				if question.Qtype == dns.TypeHTTPS {
-					return
-				}
+				//if question.Qtype == dns.TypeHTTPS {
+				//	return
+				//}
 				log.Println("Answer is empty set response code to (NXDOMAIN) for:", host, dns.RcodeNameError)
 				setResponseCode(m, dns.RcodeNameError)
 			}
