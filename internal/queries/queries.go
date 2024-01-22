@@ -37,6 +37,23 @@ func processSOA(answerRR []dns.RR, m *dns.Msg) {
 	}
 }
 
+// processA - Process A records and add them to the answer
+func processA(answerRR []dns.RR, m *dns.Msg) {
+	for _, rr := range answerRR {
+		if a, ok := rr.(*dns.A); ok {
+
+			m.Answer = append(m.Answer, &dns.A{
+				Hdr: dns.RR_Header{
+					Name:   m.Question[0].Name,
+					Rrtype: dns.TypeA,
+					Class:  dns.ClassINET,
+					Ttl:    a.Hdr.Ttl},
+				A: a.A,
+			})
+		}
+	}
+}
+
 // hasSOARecords - Check if the response has SOA records
 func hasSOARecords(response *dns.Msg) bool {
 	// Check Answer section
@@ -198,6 +215,20 @@ func GetQTypeAnswer(hostName string, question dns.Question, upstreamAddr string)
 			newEntry := createCacheEntryFromResponse(respHTTPS)
 			cache.WriteToCache(key, newEntry)
 			return respHTTPS.Answer, nil
+		} else {
+			// Re-request as TypeA
+			m.SetQuestion(hostName, dns.TypeA)
+			respConvA, _, errConv := client.Exchange(m, upstreamAddr)
+			if errConv != nil {
+				log.Printf("Failed to get TypeA response for %s. Error: %v\n", hostName, errConv)
+				return nil, errConv
+			}
+			m.Answer = respConvA.Answer
+			return respConvA.Answer, nil
+			//if hasSOARecords(respHTTPS) {
+			//	processA(respHTTPS.Ns, m)
+			//	return m.Answer, nil
+			//}
 		}
 	case dns.TypeCNAME:
 		//m.SetQuestion(hostName, question.Qtype)
