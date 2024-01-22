@@ -169,14 +169,14 @@ func GetQTypeAnswer(hostName string, question dns.Question, upstreamAddr string)
 	m.SetQuestion(dns.Fqdn(hostName), question.Qtype)
 	var records []string
 
-	//cache.GlobalCache.RLock()
+	////cache.GlobalCache.RLock()
 	key := cache.GenerateCacheKey(hostName, question.Qtype)
-	entry, ok := cache.CheckCache(key)
-	if ok {
-		m.Answer = append(m.Answer, entry.DnsMsg.Answer...)
-		return m.Answer, nil
-	}
-	//cache.GlobalCache.RUnlock()
+	//entry, ok := cache.CheckCache(key)
+	//if ok {
+	//	m.Answer = append(m.Answer, entry.DnsMsg.Answer...)
+	//	return m.Answer, nil
+	//}
+	////cache.GlobalCache.RUnlock()
 
 	switch question.Qtype {
 	case dns.TypeA:
@@ -221,7 +221,6 @@ func GetQTypeAnswer(hostName string, question dns.Question, upstreamAddr string)
 					return nil, errConv
 				}
 				return respConvCN.Answer, nil
-
 			}
 
 			// Entry not found, add it to the cache
