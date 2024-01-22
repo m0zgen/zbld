@@ -157,12 +157,6 @@ func GetQTypeAnswer(hostName string, question dns.Question, upstreamAddr string)
 	entry, ok := cache.CheckCache(key)
 	if ok {
 		m.Answer = append(m.Answer, entry.DnsMsg.Answer...)
-
-		if time.Since(entry.CreationTime) > entry.TTL {
-			cache.GlobalCache.RLock()
-			delete(cache.GlobalCache.Store, key)
-			cache.GlobalCache.RUnlock()
-		}
 		return m.Answer, nil
 	}
 	//cache.GlobalCache.RUnlock()

@@ -40,14 +40,21 @@ var mu sync.Mutex
 // Process DNS queries ------------------------------------------------------- //
 
 // handleCacheHit - Handle cache hit
-func entryInCache(m *dns.Msg, host string, question dns.Question) bool {
+func entryInCache(m *dns.Msg, host string, question dns.Question) (bool, []dns.RR) {
 
 	key := cache.GenerateCacheKey(host, question.Qtype)
 	entry, ok := cache.CheckCache(key)
 	if ok {
 		log.Println("Cache hit from handler for:", host)
 		m.Answer = append(m.Answer, entry.DnsMsg.Answer...)
-		return true
+		if time.Since(entry.CreationTime) > entry.TTL {
+			cache.GlobalCache.RLock()
+			log.Println("Entry is expired. Deleting from cache:", key)
+			delete(cache.GlobalCache.Store, key)
+			cache.GlobalCache.RUnlock()
+		}
+		defer prom.CacheHitResponseTotal.Inc()
+		return true, m.Answer
 	}
 
 	// Read from cache
@@ -60,7 +67,7 @@ func entryInCache(m *dns.Msg, host string, question dns.Question) bool {
 	//	defer prom.CacheHitResponseTotal.Inc()
 	//	return true
 	//}
-	return false
+	return false, nil
 }
 
 // setResponseCode - Set DNS response code
@@ -156,7 +163,9 @@ func getQTypeResponse(m *dns.Msg, question dns.Question, host string, clientIP n
 			log.Println("Creating answer for allowed Qtype:", question.Qtype)
 		}
 
-		if !entryInCache(m, host, question) {
+		stat, cachedAnswer := entryInCache(m, host, question)
+
+		if !stat {
 			rAnswer, _ := queries.GetQTypeAnswer(host, question, upstreamAd)
 			if rAnswer != nil {
 				if config.IsDebug {
@@ -168,6 +177,8 @@ func getQTypeResponse(m *dns.Msg, question dns.Question, host string, clientIP n
 				log.Println("Answer is empty set response code to (NXDOMAIN) for:", host, dns.RcodeNameError)
 				setResponseCode(m, dns.RcodeNameError)
 			}
+		} else {
+			m.Answer = append(m.Answer, cachedAnswer...)
 		}
 
 	} else {
@@ -210,7 +221,8 @@ func handleDNSRequest(w dns.ResponseWriter, r *dns.Msg, regexMap map[string]*reg
 		//mu.Lock()
 		upstreamDefault := upstreams.GetUpstreamServer(config.UpstreamDNSServers, config.BalancingStrategy)
 		// Check cache before requesting upstream DNS server
-		if !entryInCache(m, host, question) {
+		stat, cachedAnswer := entryInCache(m, host, question)
+		if !stat {
 			// Check if host is in hosts.txt
 			// Resolve default hosts using upstream DNS for names not in hosts.txt
 			if (matching && !config.Inverse) || (hosts[_host] && !config.Inverse) {
@@ -234,6 +246,8 @@ func handleDNSRequest(w dns.ResponseWriter, r *dns.Msg, regexMap map[string]*reg
 					returnZeroIP(m, clientIP, host)
 				}
 			}
+		} else {
+			m.Answer = append(m.Answer, cachedAnswer...)
 		}
 		//mu.Unlock()
 	}
