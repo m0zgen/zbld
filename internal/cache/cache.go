@@ -55,24 +55,9 @@ func (entry *CacheEntry) UpdateCreationTimeWithTTL(ttl time.Duration) {
 	entry.TTL = ttl
 }
 
-// CheckAndDeleteExpiredEntries - Check and delete expired TTL entries from cache
-func CheckAndDeleteExpiredEntries() {
-	// Check and delete expired TTL entries from cache
-	GlobalCache.mu.Lock()
-	defer GlobalCache.mu.Unlock()
-
-	keysToDelete := []string{}
-
-	for key, entry := range GlobalCache.Store {
-		if time.Since(entry.CreationTime) > entry.TTL {
-			keysToDelete = append(keysToDelete, key)
-		}
-	}
-
-	// Delete after iteration
-	for _, key := range keysToDelete {
-		delete(GlobalCache.Store, key)
-	}
+// GenerateCacheKey - Generate a unique cache key based on domain and record type
+func GenerateCacheKey(domain string, recordType uint16) string {
+	return fmt.Sprintf("%s_%d", domain, recordType)
 }
 
 // Caching for QTypes
@@ -100,9 +85,4 @@ func WriteToCache(key string, entry *CacheEntry) {
 
 	// Check and delete expired TTL entries from cache
 	//CheckAndDeleteExpiredEntries()
-}
-
-// GenerateCacheKey - Generate a unique cache key based on domain and record type
-func GenerateCacheKey(domain string, recordType uint16) string {
-	return fmt.Sprintf("%s_%d", domain, recordType)
 }

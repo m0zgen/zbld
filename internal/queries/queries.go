@@ -50,24 +50,6 @@ func processSOA(answerRR []dns.RR, m *dns.Msg) {
 	}
 }
 
-// processA - Process A records and add them to the answer
-func processA(answerRR []dns.RR, m *dns.Msg) {
-	for _, rr := range answerRR {
-		if a, ok := rr.(*dns.A); ok {
-
-			m.Answer = append(m.Answer, &dns.A{
-				Hdr: dns.RR_Header{
-					Name:   m.Question[0].Name,
-					Rrtype: dns.TypeA,
-					Class:  dns.ClassINET,
-					Ttl:    a.Hdr.Ttl,
-				},
-				A: a.A,
-			})
-		}
-	}
-}
-
 // hasSOARecords - Check if the response has SOA records
 func hasSOARecords(response *dns.Msg) bool {
 	// Check Answer section
@@ -200,11 +182,8 @@ func GetQTypeAnswer(hostName string, question dns.Question, upstreamAddr string)
 			return nil, err
 		}
 		if err == nil && len(respA.Answer) > 0 {
-			// Entry not found, add it to the cache
 			newEntry := createCacheEntryFromResponse(respA)
 			cache.WriteToCache(key, newEntry)
-			// Add records to the corresponding cache fields
-			//bindAnswerCache(respA, hostName, question)
 			return respA.Answer, nil
 		}
 	case dns.TypeAAAA:
@@ -214,7 +193,6 @@ func GetQTypeAnswer(hostName string, question dns.Question, upstreamAddr string)
 		}
 
 		if err == nil && len(respAAAA.Answer) > 0 {
-			// Entry not found, add it to the cache
 			newEntry := createCacheEntryFromResponse(respAAAA)
 			cache.WriteToCache(key, newEntry)
 			return respAAAA.Answer, nil
@@ -238,7 +216,6 @@ func GetQTypeAnswer(hostName string, question dns.Question, upstreamAddr string)
 				return respConvCN.Answer, nil
 			}
 
-			// Entry not found, add it to the cache
 			newEntry := createCacheEntryFromResponse(respHTTPS)
 			cache.WriteToCache(key, newEntry)
 			return respHTTPS.Answer, nil
