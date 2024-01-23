@@ -19,6 +19,7 @@ type CacheEntry struct {
 
 // Cache - Structure for storing cache entries
 type Cache struct {
+	stop  chan struct{}
 	mu    sync.RWMutex
 	Store map[string]*CacheEntry
 }
@@ -38,6 +39,16 @@ func (cache *Cache) RUnlock() {
 	cache.mu.RUnlock()
 }
 
+// Lock - Mutex lock
+func (cache *Cache) Lock() {
+	cache.mu.Lock()
+}
+
+// Unlock - Mutex unlock
+func (cache *Cache) Unlock() {
+	cache.mu.Unlock()
+}
+
 // UpdateCreationTimeWithTTL - Update cache entry TTL and creation time
 func (entry *CacheEntry) UpdateCreationTimeWithTTL(ttl time.Duration) {
 	entry.CreationTime = time.Now()
@@ -47,8 +58,8 @@ func (entry *CacheEntry) UpdateCreationTimeWithTTL(ttl time.Duration) {
 // CheckAndDeleteExpiredEntries - Check and delete expired TTL entries from cache
 func CheckAndDeleteExpiredEntries() {
 	// Check and delete expired TTL entries from cache
-	//GlobalCache.RLock()
-	//defer GlobalCache.RUnlock()
+	GlobalCache.mu.Lock()
+	defer GlobalCache.mu.Unlock()
 
 	keysToDelete := []string{}
 
@@ -68,17 +79,21 @@ func CheckAndDeleteExpiredEntries() {
 
 // CheckCache - Check if an entry exists in the cache
 func CheckCache(key string) (*CacheEntry, bool) {
-	GlobalCache.RLock()
-	defer GlobalCache.RUnlock()
+	//GlobalCache.RLock()
+	GlobalCache.mu.RLock()
+	defer GlobalCache.mu.RUnlock()
 	//key := GenerateCacheKey(domain, recordType)
 	entry, ok := GlobalCache.Store[key]
+	if !ok {
+		return nil, false
+	}
 	return entry, ok
 }
 
 func WriteToCache(key string, entry *CacheEntry) {
 	// Lock for write
-	GlobalCache.RLock()
-	defer GlobalCache.RUnlock()
+	GlobalCache.mu.Lock()
+	defer GlobalCache.mu.Unlock()
 
 	// Write entry to cache
 	GlobalCache.Store[key] = entry
