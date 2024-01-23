@@ -224,7 +224,7 @@ func handleDNSRequest(w dns.ResponseWriter, r *dns.Msg, regexMap map[string]*reg
 		//mu.Lock()
 		upstreamDefault := upstreams.GetUpstreamServer(config.UpstreamDNSServers, config.BalancingStrategy)
 		// Check cache before requesting upstream DNS server
-		stat, cachedAnswer := entryInCache(m, host, question)
+		stat, _ := entryInCache(m, host, question)
 		if !stat {
 			// Check if host is in hosts.txt
 			// Resolve default hosts using upstream DNS for names not in hosts.txt
@@ -249,9 +249,10 @@ func handleDNSRequest(w dns.ResponseWriter, r *dns.Msg, regexMap map[string]*reg
 					returnZeroIP(m, clientIP, host)
 				}
 			}
-		} else {
-			m.Answer = append(m.Answer, cachedAnswer...)
 		}
+		//else {
+		//	m.Answer = append(m.Answer, cachedAnswer...)
+		//}
 		//mu.Unlock()
 	}
 	defer prom.DnsQueriesTotal.Inc()
