@@ -7,7 +7,20 @@ import (
 	"net"
 	"time"
 	"zdns/internal/cache"
+	configuration "zdns/internal/config"
 )
+
+var configCacheTTLSeconds int
+
+// Config setter -------------------------------------------------------- //
+
+// SetConfig - Accept config.Config from external package
+// and set configuration parameters to local variables
+func SetConfig(cfg *configuration.Config) {
+	// Set local variables through cgf.Config
+	configCacheTTLSeconds = cfg.CacheTTLSeconds
+	// ...
+}
 
 // Local functions ---------------------------------------------------------- //
 
@@ -47,7 +60,8 @@ func processA(answerRR []dns.RR, m *dns.Msg) {
 					Name:   m.Question[0].Name,
 					Rrtype: dns.TypeA,
 					Class:  dns.ClassINET,
-					Ttl:    a.Hdr.Ttl},
+					Ttl:    a.Hdr.Ttl,
+				},
 				A: a.A,
 			})
 		}
@@ -128,8 +142,9 @@ func createCacheEntryFromResponse(resp *dns.Msg) *cache.CacheEntry {
 		IPv4:         []net.IP{},
 		IPv6:         []net.IP{},
 		CreationTime: time.Now(),
-		TTL:          time.Duration(resp.Answer[0].Header().Ttl) * time.Second,
-		DnsMsg:       resp,
+		//TTL:          time.Duration(resp.Answer[0].Header().Ttl) * time.Second,
+		TTL:    time.Duration(configCacheTTLSeconds) * time.Second,
+		DnsMsg: resp,
 	}
 
 	// Add records to the corresponding fields

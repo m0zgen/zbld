@@ -419,6 +419,7 @@ func main() {
 
 	// Pass config to lists package
 	lists.SetConfig(&config)
+	queries.SetConfig(&config)
 
 	// Load hosts.txt and bind regex patterns to regexMap in to lists package
 	if config.UseLocalHosts {
