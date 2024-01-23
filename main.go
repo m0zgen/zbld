@@ -48,10 +48,10 @@ func entryInCache(m *dns.Msg, host string, question dns.Question) (bool, []dns.R
 		log.Println("Cache hit from handler for:", host)
 		m.Answer = append(m.Answer, entry.DnsMsg.Answer...)
 		if time.Since(entry.CreationTime) > entry.TTL {
-			cache.GlobalCache.RLock()
+			cache.GlobalCache.Lock()
 			log.Println("Entry is expired. Deleting from cache:", key)
 			delete(cache.GlobalCache.Store, key)
-			cache.GlobalCache.RUnlock()
+			cache.GlobalCache.Unlock()
 		}
 		defer prom.CacheHitResponseTotal.Inc()
 		return true, m.Answer
@@ -385,6 +385,7 @@ func main() {
 	permanentHosts = make(map[string]bool)
 	regexMap = make(map[string]*regexp.Regexp)
 	permanentRegexMap = make(map[string]*regexp.Regexp)
+	cache.GlobalCache.Store = make(map[string]*cache.CacheEntry)
 	mu.Unlock()
 
 	// Init Prometheus metrics and Logging -------------------------------------- //
@@ -460,7 +461,7 @@ func main() {
 	}()
 
 	// Run DNS server for TCP requests
-	//wg.Add(1)
+	wg.Add(1)
 	go func() {
 		defer wg.Done()
 
