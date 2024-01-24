@@ -129,9 +129,19 @@ func returnZeroIP(m *dns.Msg, clientIP net.IP, host string) []dns.RR {
 			Class:  dns.ClassINET,
 			Ttl:    0,
 		},
-		A: net.ParseIP("0.0.0.0"),
+		A: net.ParseIP(config.DefaultIPAddress),
 	}
 	m.Answer = append(m.Answer, &answer)
+	m.Answer = append(m.Answer, &dns.TXT{
+		Hdr: dns.RR_Header{
+			Name:   m.Question[0].Name,
+			Rrtype: dns.TypeTXT,
+			Class:  dns.ClassINET,
+			Ttl:    0},
+		Txt: []string{"Domain blocked by OpenBLD.net DNS. Client: " + clientIP.String() + " Host: " + host},
+		// Another TXT fields
+	})
+	//m.SetRcode(m, dns.RcodeNameError)
 	log.Println("Zero response for:", clientIP, host)
 	prom.ZeroResolutionsTotal.Inc()
 	return m.Answer

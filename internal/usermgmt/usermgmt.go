@@ -326,6 +326,7 @@ func applyNewConfig(newFilename string, tmpl *template.Template, newUserConfig U
 	}
 
 	fmt.Println("Template applied and saved to", newFilename)
+	os.Exit(0)
 }
 
 // newUserConfig - Create new user struct config with updated data
