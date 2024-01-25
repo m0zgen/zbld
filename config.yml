@@ -15,12 +15,12 @@ allowed_qtypes:
   - AAAA
   - HTTPS
   - CNAME
-  - NS
-  - PTR
-#  - MX
+#  - NS
 #  - SRV
 #  - SOA
 #  - TXT
+#  - PTR
+#  - MX
 # Not implemented yet
 #  - NAPTR
 #  - DS
