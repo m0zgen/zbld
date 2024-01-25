@@ -118,6 +118,20 @@ func bindAnswerCache(resp *dns.Msg, key string) {
 	//cache.GlobalCache.Store[key)] = entry
 }
 
+func createCacheEntryFromSOA(resp *dns.Msg) *cache.CacheEntry {
+
+	entry := &cache.CacheEntry{
+		IPv4:         []net.IP{},
+		IPv6:         []net.IP{},
+		CreationTime: time.Now(),
+		//TTL:          time.Duration(resp.Answer[0].Header().Ttl) * time.Second,
+		TTL:    time.Duration(configCacheTTLSeconds) * time.Second,
+		DnsMsg: resp,
+	}
+
+	return entry
+}
+
 func createCacheEntryFromResponse(resp *dns.Msg) *cache.CacheEntry {
 	// Create cache entry
 	entry := &cache.CacheEntry{
@@ -196,6 +210,22 @@ func GetQTypeAnswer(hostName string, question dns.Question, upstreamAddr string)
 			newEntry := createCacheEntryFromResponse(respAAAA)
 			cache.WriteToCache(key, newEntry)
 			return respAAAA.Answer, nil
+		} else {
+			///
+			for _, ans := range respAAAA.Ns {
+				switch ans.(type) {
+				case *dns.SOA:
+					//soaRecord := ans.(*dns.SOA)
+					//log.Println("SOA record found for:", soaRecord)
+					processSOA(respAAAA.Ns, m)
+					soaEntry := createCacheEntryFromSOA(m)
+					cache.WriteToCache(key, soaEntry)
+					return m.Answer, nil
+				default:
+					return nil, fmt.Errorf("unsupported record type: %d", question.Qtype)
+				}
+			}
+			///
 		}
 	case dns.TypeHTTPS:
 		respHTTPS, _, err := client.Exchange(m, upstreamAddr)
@@ -244,7 +274,6 @@ func GetQTypeAnswer(hostName string, question dns.Question, upstreamAddr string)
 		if err == nil && len(respCNAME.Answer) > 0 {
 			return respCNAME.Answer, nil
 		} else {
-
 			// Process answers depending on the record type
 			for _, answer := range respCNAME.Ns {
 				switch question.Qtype {
@@ -255,6 +284,8 @@ func GetQTypeAnswer(hostName string, question dns.Question, upstreamAddr string)
 					if hasSOARecords(respCNAME) {
 						// Process SOA records and add them to the answer
 						processSOA(respCNAME.Ns, m)
+						soaEntry := createCacheEntryFromSOA(m)
+						cache.WriteToCache(key, soaEntry)
 						return m.Answer, nil
 					}
 				case dns.TypeSOA:
@@ -296,6 +327,8 @@ func GetQTypeAnswer(hostName string, question dns.Question, upstreamAddr string)
 
 			if hasSOARecords(respPTR) {
 				processSOA(respPTR.Ns, m)
+				soaEntry := createCacheEntryFromSOA(m)
+				cache.WriteToCache(key, soaEntry)
 				return m.Answer, nil
 			}
 		}
@@ -311,6 +344,8 @@ func GetQTypeAnswer(hostName string, question dns.Question, upstreamAddr string)
 
 			if hasSOARecords(respSOA) {
 				processSOA(respSOA.Ns, m)
+				soaEntry := createCacheEntryFromSOA(m)
+				cache.WriteToCache(key, soaEntry)
 				return m.Answer, nil
 			}
 		}
@@ -325,6 +360,8 @@ func GetQTypeAnswer(hostName string, question dns.Question, upstreamAddr string)
 		} else {
 			if hasSOARecords(respSRV) {
 				processSOA(respSRV.Ns, m)
+				soaEntry := createCacheEntryFromSOA(m)
+				cache.WriteToCache(key, soaEntry)
 				return m.Answer, nil
 			}
 		}
@@ -349,6 +386,8 @@ func GetQTypeAnswer(hostName string, question dns.Question, upstreamAddr string)
 		} else {
 			if hasSOARecords(respTXT) {
 				processSOA(respTXT.Ns, m)
+				soaEntry := createCacheEntryFromSOA(m)
+				cache.WriteToCache(key, soaEntry)
 				return m.Answer, nil
 			}
 		}
