@@ -45,7 +45,7 @@ func entryInCache(m *dns.Msg, host string, question dns.Question) (bool, []dns.R
 	key := cache.GenerateCacheKey(host, question.Qtype)
 	entry, ok := cache.CheckCache(key)
 	if ok {
-		log.Println("Cache hit from handler for:", host)
+		log.Println("Cache hit answer for:", host+"\n", entry.DnsMsg.Answer)
 		m.Answer = append(m.Answer, entry.DnsMsg.Answer...)
 		if time.Since(entry.CreationTime) > entry.TTL {
 			cache.GlobalCache.Lock()
