@@ -51,10 +51,15 @@ use_local_hosts: true
 use_remote_hosts: true
 
 # DNS server settings
-# Default respond for blocked domains
-default_ip_address: "0.0.0.0"
 # Local DNS server port
 dns_port: 50000
+
+# Settings for blocked domains
+# Default respond for blocked domains
+default_ip_address: "0.0.0.0"
+# Console TXT message for blocked domain (for nslookup etc.)
+console_message_enable: true
+console_message: "- Domain blocked by zDNS. Client IP:"
 
 # Logging settings
 # Enable/Disable logging to file

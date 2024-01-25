@@ -120,11 +120,15 @@ permanent_whitelisted: "hosts-permanent.txt"
 permanent_dns_servers:
   - "95.85.95.85:53"
   - "2.56.220.2:53"
+console_message_enable: true
+console_message: "- Domain blocked by zDNS. Client IP:"
 ```
 
 > [!TIP]
 > Permanent option is autonomous function with ignored `inverse` option. 
 Domains from `hosts-permanent.txt` will always be resolved to real IP address from `permanent_dns_servers`.
+
+* Console message will be displayed in `dig` or `nslookup` as TXT in console if `console_message_enable` is `true`.
 
 ## Specified config file
 

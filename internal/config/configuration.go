@@ -14,6 +14,8 @@ type Config struct {
 	UseRemoteHosts       bool     `yaml:"use_remote_hosts"`
 	ReloadInterval       string   `yaml:"reload_interval_duration"`
 	DefaultIPAddress     string   `yaml:"default_ip_address"`
+	ConsoleMessage       string   `yaml:"console_message"`
+	ConsoleMessageEnable bool     `yaml:"console_message_enable"`
 	DNSPort              int      `yaml:"dns_port"`
 	EnableLogging        bool     `yaml:"enable_logging"`
 	LogFile              string   `yaml:"log_file"`

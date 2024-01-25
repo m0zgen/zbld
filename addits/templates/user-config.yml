@@ -22,6 +22,8 @@ permanent_file_url:
   - "https://raw.githubusercontent.com/m0zgen/my-zdns/master/allow.txt"
 reload_interval_duration: 1h
 default_ip_address: "0.0.0.0"
+console_message_enabled: true
+console_message: "- Blocked by zDNS"
 enable_logging: true
 cache_enabled: true
 cache_ttl_seconds: 3600
