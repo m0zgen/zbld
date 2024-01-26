@@ -70,7 +70,7 @@ log_file: "zdns.log"
 # If enable_cache is set to true, then the results of DNS queries will be cached
 cache_enabled: true
 # Stale cache entries will be removed after this many seconds
-cache_ttl_seconds: 3600
+cache_ttl_seconds: 60
 
 # Prometheus Metrics
 metrics_enabled: true
