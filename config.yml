@@ -64,7 +64,11 @@ console_message: "- Domain blocked by zDNS. Client IP:"
 # Logging settings
 # Enable/Disable logging to file
 enable_logging: true
-log_file: "zdns.log"
+# Duration hours for log files (maxAge)
+log_store_duration: 1d
+log_dir: "logs"
+# Log file prefix
+log_file: "zdns_root"
 
 # Cache settings
 # If enable_cache is set to true, then the results of DNS queries will be cached

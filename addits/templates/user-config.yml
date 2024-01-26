@@ -11,8 +11,6 @@ allowed_qtypes:
   - AAAA
   - CNAME
   - HTTPS
-  - NS
-  - PTR
 use_local_hosts: true
 use_remote_hosts: true
 permanent_enabled: true
@@ -25,6 +23,8 @@ default_ip_address: "0.0.0.0"
 console_message_enabled: true
 console_message: "- Blocked by zDNS"
 enable_logging: true
+log_store_duration: 1d
+log_dir: "users/logs"
 cache_enabled: true
 cache_ttl_seconds: 3600
 metrics_enabled: true
