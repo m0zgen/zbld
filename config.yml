@@ -15,8 +15,8 @@ allowed_qtypes:
   - AAAA
   - HTTPS
   - CNAME
-  - NS
-  - PTR
+#  - NS
+#  - PTR
 #  - SRV
 #  - SOA
 #  - TXT
