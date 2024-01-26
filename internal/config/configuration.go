@@ -18,7 +18,9 @@ type Config struct {
 	ConsoleMessageEnable bool     `yaml:"console_message_enable"`
 	DNSPort              int      `yaml:"dns_port"`
 	EnableLogging        bool     `yaml:"enable_logging"`
+	LogDir               string   `yaml:"log_dir"`
 	LogFile              string   `yaml:"log_file"`
+	LogStoreDuration     string   `yaml:"log_store_duration"`
 	BalancingStrategy    string   `yaml:"load_balancing_strategy"`
 	Inverse              bool     `yaml:"inverse"`
 	CacheTTLSeconds      int      `yaml:"cache_ttl_seconds"`
