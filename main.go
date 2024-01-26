@@ -179,26 +179,22 @@ func getQTypeResponse(m *dns.Msg, question dns.Question, host string, clientIP n
 			log.Println("Creating answer for allowed Qtype:", question.Qtype)
 		}
 
-		stat, cachedAnswer := entryInCache(m, host, question)
-
-		if !stat {
-			rAnswer, _ := queries.GetQTypeAnswer(host, question, upstreamAd)
-			if rAnswer != nil {
-				if config.IsDebug {
-					log.Printf("Answer: %s\n", rAnswer)
-				}
-				m.Answer = append(m.Answer, rAnswer...)
-				prom.SuccessfulResolutionsTotal.Inc()
-			} else {
-				//if question.Qtype == dns.TypeHTTPS {
-				//	return
-				//}
-				log.Println("Answer is empty set response code to (NXDOMAIN) for:", host, dns.RcodeNameError)
-				setResponseCode(m, dns.RcodeNameError)
+		//stat, cachedAnswer := entryInCache(m, host, question)
+		//if !stat {
+		rAnswer, _ := queries.GetQTypeAnswer(host, question, upstreamAd)
+		if rAnswer != nil {
+			if config.IsDebug {
+				log.Printf("Answer: %s\n", rAnswer)
 			}
+			m.Answer = append(m.Answer, rAnswer...)
+			prom.SuccessfulResolutionsTotal.Inc()
 		} else {
-			m.Answer = append(m.Answer, cachedAnswer...)
+			log.Println("Answer is empty set response code to (NXDOMAIN) for:", host, dns.RcodeNameError)
+			setResponseCode(m, dns.RcodeNameError)
 		}
+		//} else {
+		//	m.Answer = append(m.Answer, cachedAnswer...)
+		//}
 
 	} else {
 		// If IPv4 address is not available, set response code to code from MsgHdr.Rcode (resp.MsgHdr.Rcode)
@@ -217,14 +213,15 @@ func handleDNSRequest(w dns.ResponseWriter, r *dns.Msg, regexMap map[string]*reg
 	m.SetReply(r)
 	m.Authoritative = true // Set authoritative flag to compress response or not
 
-	// Check net.IP type
-	if tcpAddr, ok := w.RemoteAddr().(*net.TCPAddr); ok {
-		//log.Println("TCP")
-		clientIP = tcpAddr.IP
-	} else if udpAddr, ok := w.RemoteAddr().(*net.UDPAddr); ok {
-		//log.Println("UDP")
-		clientIP = udpAddr.IP
-	} else {
+	// Get client IP address from type
+	switch addr := w.RemoteAddr().(type) {
+	case *net.TCPAddr:
+		clientIP = addr.IP
+		// log.Println("TCP")
+	case *net.UDPAddr:
+		clientIP = addr.IP
+		// log.Println("UDP")
+	default:
 		log.Println("Unknown network type")
 		clientIP = nil
 	}
@@ -266,9 +263,6 @@ func handleDNSRequest(w dns.ResponseWriter, r *dns.Msg, regexMap map[string]*reg
 				}
 			}
 		}
-		//else {
-		//	m.Answer = append(m.Answer, cachedAnswer...)
-		//}
 		//mu.Unlock()
 	}
 	defer prom.DnsQueriesTotal.Inc()
