@@ -44,11 +44,7 @@ func getNextUpstreamServer(upstreams []string) string {
 
 // getRobinUpstreamServer - Round-robin upstream balancing policy
 func getRobinUpstreamServer(upstreams []string) string {
-	//mu.Lock()
-	//defer mu.Unlock()
-	// Simple round-robin: select next server
 	CurrentIndex = (CurrentIndex + 1) % len(upstreams)
-	//log.Println("CurrentIndex: ", CurrentIndex)
 	return upstreams[CurrentIndex]
 }
 
