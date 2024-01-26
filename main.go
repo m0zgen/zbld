@@ -349,6 +349,7 @@ func main() {
 	addUserFlag := flag.String("adduser", "", "Username for configuration")
 	delUserFlag := flag.String("deluser", "", "Username for deletion")
 	forceFlag := flag.Bool("force", false, "Force operations")
+	clearLogsFlag := flag.Bool("clearlogs", false, "Clear logs")
 	// Another flags
 	flag.StringVar(&configFile, "config", "config.yml", "Config file path")
 	flag.StringVar(&hostsFile, "hosts", "hosts.txt", "Hosts file path")
@@ -374,6 +375,17 @@ func main() {
 	if *delUserFlag != "" && *addUserFlag == "" {
 		users.SetConfig(&config)
 		users.DeleteTargetUser(*delUserFlag, *forceFlag)
+	}
+
+	// Clear logs if -clearlogs argument is passed
+	if *clearLogsFlag {
+		maxAgeDuration, err := time.ParseDuration(config.LogStoreDuration)
+		if err != nil {
+			log.Fatal("Error parsing max age duration:", err)
+		}
+		fs.DeleteOldLogFiles(config.LogDir, maxAgeDuration)
+		fs.DeleteOldLogFiles("users/logs", maxAgeDuration)
+
 	}
 
 	// Load hosts --------------------------------------------------------------- //
