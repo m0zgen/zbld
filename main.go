@@ -20,6 +20,7 @@ import (
 	"time"
 	"zdns/internal/cache"
 	"zdns/internal/config"
+	"zdns/internal/fs"
 	"zdns/internal/lists"
 	"zdns/internal/prometheus"
 	"zdns/internal/queries"
@@ -150,6 +151,7 @@ func returnZeroIP(m *dns.Msg, clientIP net.IP, host string) []dns.RR {
 	//m.SetRcode(m, dns.RcodeNameError)
 	log.Println("Zero response for:", clientIP, host)
 	prom.ZeroResolutionsTotal.Inc()
+	prom.BlockedDomainNameCounter.WithLabelValues(host).Inc()
 	return m.Answer
 
 }
@@ -199,6 +201,7 @@ func getQTypeResponse(m *dns.Msg, question dns.Question, host string, clientIP n
 	} else {
 		// If IPv4 address is not available, set response code to code from MsgHdr.Rcode (resp.MsgHdr.Rcode)
 		log.Println("Qtype is not allowed <num>. See allowed Qtypes in <[A AAAA ..]>:", question.Qtype, config.AllowedQtypes)
+		prom.NXDomainNameCounter.WithLabelValues(question.Name).Inc()
 		setResponseCode(m, dns.RcodeRefused)
 	}
 
@@ -233,7 +236,7 @@ func handleDNSRequest(w dns.ResponseWriter, r *dns.Msg, regexMap map[string]*reg
 		_host := strings.TrimRight(host, ".")
 		matching := lists.IsMatching(_host, regexMap)
 		permanentMatching := permanentHosts[_host] || (lists.IsMatching(_host, permanentRegexMap) && config.PermanentEnabled)
-
+		prom.RequestedDomainNameCounter.WithLabelValues(_host).Inc()
 		//mu.Lock()
 		upstreamDefault := upstreams.GetUpstreamServer(config.UpstreamDNSServers, config.BalancingStrategy)
 		// Check cache before requesting upstream DNS server
@@ -309,6 +312,10 @@ func initMetrics() {
 		prometheus.MustRegister(prom.ZeroResolutionsTotal)
 		prometheus.MustRegister(prom.ReloadHostsTotal)
 		prometheus.MustRegister(prom.CacheHitResponseTotal)
+		prometheus.MustRegister(prom.RequestsQTypeTotal)
+		prometheus.MustRegister(prom.RequestedDomainNameCounter)
+		prometheus.MustRegister(prom.BlockedDomainNameCounter)
+		prometheus.MustRegister(prom.NXDomainNameCounter)
 	}
 }
 
@@ -407,7 +414,12 @@ func main() {
 	initLogging()
 	// Enable logging to file and stdout
 	if config.EnableLogging {
-		logFile, err := os.Create(config.LogFile)
+		if !fs.IsDirExists(config.LogDir) {
+			fs.GenerateDirs(config.LogDir)
+		}
+		logPath := config.LogDir + "/" + config.LogFile
+		// logFile, err := os.Create(config.LogFile) // Recreate it every zdns restart
+		logFile, err := os.OpenFile(logPath+"_"+time.Now().Format("2006-01-02")+".log", os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0666)
 		if err != nil {
 			log.Fatal("Log file creation error:", err)
 		}
@@ -493,6 +505,7 @@ func main() {
 	if config.MetricsEnabled {
 		wg.Add(1)
 		go func() {
+			defer wg.Done()
 			log.Printf("Prometheus metrics server is listening on :%d...", config.MetricsPort)
 			http.Handle("/metrics", promhttp.Handler())
 			err := http.ListenAndServe(fmt.Sprintf(":%d", config.MetricsPort), nil)
@@ -502,6 +515,26 @@ func main() {
 		}()
 	}
 
+	// Run log files cleanup
+	if config.EnableLogging {
+		wg.Add(1) // Увеличиваем счетчик ожидаемых горутин до 2
+
+		// Горутина для удаления старых логов
+		//go func() {
+		//	defer wg.Done()
+		//	maxAgeDuration, err := time.ParseDuration(config.LogStoreDuration)
+		//	if err != nil {
+		//		log.Fatal("Error parsing max age duration:", err)
+		//	}
+		//	fs.DeleteOldLogFiles(config.LogDir, maxAgeDuration)
+		//}()
+
+		// Горутина для создания нового файла логов ежедневно
+		go func() {
+			defer wg.Done()
+			fs.CreateNewLogFileDaily(config.LogDir + "/" + config.LogFile)
+		}()
+	}
 	// Exit on Ctrl+C or SIGTERM ------------------------------------------------ //
 
 	// Handle interrupt signals
