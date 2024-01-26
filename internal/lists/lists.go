@@ -52,7 +52,7 @@ func IsMatching(host string, regexMap map[string]*regexp.Regexp) bool {
 
 // loadHosts - Load hosts from file and bind maps
 func loadHosts(filename string, useRemote bool, urls []string, regexMap map[string]*regexp.Regexp, targetMap map[string]bool) error {
-
+	//TODO: Add counting lines for downloaded files and set limit for it (100 lines for example)
 	var downloadedFile = strings.TrimRight(filename, ".txt") + "_downloaded.txt"
 
 	if useLocalHosts {
