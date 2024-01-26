@@ -1,6 +1,8 @@
 package prom
 
-import "github.com/prometheus/client_golang/prometheus"
+import (
+	"github.com/prometheus/client_golang/prometheus"
+)
 
 // Prometheus scoping metrics
 var (
@@ -38,5 +40,33 @@ var (
 			Name: "zdns_cache_hit_response_total_count",
 			Help: "Total number of responses from cache count.",
 		},
+	)
+	RequestsQTypeTotal = prometheus.NewCounterVec(
+		prometheus.CounterOpts{
+			Name: "zdns_requests_qtype_total",
+			Help: "Total number of DNS requests by type",
+		},
+		[]string{"type"},
+	)
+	RequestedDomainNameCounter = prometheus.NewCounterVec(
+		prometheus.CounterOpts{
+			Name: "zdns_domain_name_requests_total",
+			Help: "Total number of DNS requests by domain",
+		},
+		[]string{"domain"},
+	)
+	BlockedDomainNameCounter = prometheus.NewCounterVec(
+		prometheus.CounterOpts{
+			Name: "zdns_domain_name_blocked_total",
+			Help: "Total number of blocked DNS requests by domain",
+		},
+		[]string{"domain"},
+	)
+	NXDomainNameCounter = prometheus.NewCounterVec(
+		prometheus.CounterOpts{
+			Name: "zdns_domain_name_nxdomain_total",
+			Help: "Total number of NXDOMAIN answers by domain",
+		},
+		[]string{"domain"},
 	)
 )
