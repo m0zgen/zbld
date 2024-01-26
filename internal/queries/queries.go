@@ -8,6 +8,7 @@ import (
 	"time"
 	"zdns/internal/cache"
 	configuration "zdns/internal/config"
+	"zdns/internal/prometheus"
 )
 
 var configCacheTTLSeconds int
@@ -167,10 +168,12 @@ func GetQTypeAnswer(hostName string, question dns.Question, upstreamAddr string)
 		}
 		if err == nil && len(respA.Answer) > 0 {
 			cache.WriteToCache(key, createCacheEntryFromA(respA))
+			defer prom.RequestsQTypeTotal.WithLabelValues("TypeA").Inc()
 			return respA.Answer, nil
 		}
 	case dns.TypeAAAA:
 		respAAAA, _, err := client.Exchange(m, upstreamAddr)
+		defer prom.RequestsQTypeTotal.WithLabelValues("TypeAAAA").Inc()
 		return processResponse(m, respAAAA, key, err)
 	case dns.TypeHTTPS:
 		respHTTPS, _, err := client.Exchange(m, upstreamAddr)
