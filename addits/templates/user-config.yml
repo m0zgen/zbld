@@ -24,6 +24,7 @@ console_message_enabled: true
 console_message: "- Blocked by zDNS"
 enable_logging: true
 log_store_duration: 24h
+# Note: Not change this parameter
 log_dir: "users/logs"
 cache_enabled: true
 cache_ttl_seconds: 3600

@@ -384,7 +384,7 @@ func main() {
 			log.Fatal("Error parsing max age duration:", err)
 		}
 		fs.DeleteOldLogFiles(config.LogDir, maxAgeDuration)
-		fs.DeleteOldLogFiles("users/logs", maxAgeDuration)
+		//fs.DeleteOldLogFiles("users/logs", maxAgeDuration)
 
 	}
 

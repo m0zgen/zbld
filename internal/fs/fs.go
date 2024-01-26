@@ -88,6 +88,7 @@ func CopyFile(srcFile, dstFile string) error {
 
 // DeleteOldLogFiles - Delete old log files
 func DeleteOldLogFiles(logDir string, maxAge time.Duration) {
+	log.Println("Start walk through directory with time duration:", logDir, maxAge)
 	for {
 		err := filepath.Walk(logDir, func(path string, info os.FileInfo, err error) error {
 			if err != nil {
@@ -112,7 +113,7 @@ func DeleteOldLogFiles(logDir string, maxAge time.Duration) {
 func CreateNewLogFileDaily(logPath string) {
 	// Determine the current day
 	currentDay := time.Now().Day()
-	log.Println("Current day:", currentDay)
+	//log.Println("Current day:", currentDay)
 
 	// Check the current day and create a new log file if a new day begins
 	for {
