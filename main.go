@@ -52,13 +52,20 @@ func entryInCache(m *dns.Msg, host string, question dns.Question) (bool, []dns.R
 			log.Println("Cache hit answer for:", host)
 		}
 		m.Answer = append(m.Answer, entry.DnsMsg.Answer...)
+
+		// Send metric cpint to goroutine
+		//go func() {
+		//	prom.CacheHitResponseTotal.Inc()
+		//}()
+		prom.IncrementCacheTotal()
+
 		if time.Since(entry.CreationTime) > entry.TTL {
 			cache.GlobalCache.Lock()
 			log.Println("Entry is expired. Deleting from cache:", key)
 			delete(cache.GlobalCache.Store, key)
 			cache.GlobalCache.Unlock()
 		}
-		defer prom.CacheHitResponseTotal.Inc()
+
 		return true, m.Answer
 	}
 
@@ -150,8 +157,10 @@ func returnZeroIP(m *dns.Msg, clientIP net.IP, host string) []dns.RR {
 	}
 	//m.SetRcode(m, dns.RcodeNameError)
 	log.Println("Zero response for:", clientIP, host)
-	prom.ZeroResolutionsTotal.Inc()
-	prom.BlockedDomainNameCounter.WithLabelValues(host).Inc()
+	//prom.ZeroResolutionsTotal.Inc()
+	prom.IncrementZeroResolutionsTotal()
+	//prom.BlockedDomainNameCounter.WithLabelValues(host).Inc()
+	prom.IncrementBlockedDomainNameCounter(host)
 	return m.Answer
 
 }
@@ -189,7 +198,8 @@ func getQTypeResponse(m *dns.Msg, question dns.Question, host string, clientIP n
 				log.Printf("Answer: %s\n", rAnswer)
 			}
 			m.Answer = append(m.Answer, rAnswer...)
-			prom.SuccessfulResolutionsTotal.Inc()
+			//prom.SuccessfulResolutionsTotal.Inc()
+			prom.IncrementSuccessfulResolutionsTotal()
 		} else {
 			log.Println("Answer is empty set response code to (NXDOMAIN) for:", host, dns.RcodeNameError)
 			setResponseCode(m, dns.RcodeNameError)
@@ -201,7 +211,8 @@ func getQTypeResponse(m *dns.Msg, question dns.Question, host string, clientIP n
 	} else {
 		// If IPv4 address is not available, set response code to code from MsgHdr.Rcode (resp.MsgHdr.Rcode)
 		log.Println("Qtype is not allowed <num>. See allowed Qtypes in <[A AAAA ..]>:", question.Qtype, config.AllowedQtypes)
-		prom.NXDomainNameCounter.WithLabelValues(question.Name).Inc()
+		//prom.NXDomainNameCounter.WithLabelValues(question.Name).Inc()
+		prom.IncrementNXDomainNameCounter(question.Name)
 		setResponseCode(m, dns.RcodeRefused)
 	}
 
@@ -236,7 +247,8 @@ func handleDNSRequest(w dns.ResponseWriter, r *dns.Msg, regexMap map[string]*reg
 		_host := strings.TrimRight(host, ".")
 		matching := lists.IsMatching(_host, regexMap)
 		permanentMatching := permanentHosts[_host] || (lists.IsMatching(_host, permanentRegexMap) && config.PermanentEnabled)
-		prom.RequestedDomainNameCounter.WithLabelValues(_host).Inc()
+		//prom.RequestedDomainNameCounter.WithLabelValues(_host).Inc()
+		prom.IncrementRequestedDomainNameCounter(_host)
 		//mu.Lock()
 		upstreamDefault := upstreams.GetUpstreamServer(config.UpstreamDNSServers, config.BalancingStrategy)
 		// Check cache before requesting upstream DNS server
@@ -268,7 +280,8 @@ func handleDNSRequest(w dns.ResponseWriter, r *dns.Msg, regexMap map[string]*reg
 		}
 		//mu.Unlock()
 	}
-	defer prom.DnsQueriesTotal.Inc()
+	//defer prom.DnsQueriesTotal.Inc()
+	prom.IncrementDnsQueriesTotal()
 	// Send response to client and try to write response
 	err := w.WriteMsg(m)
 	// If error is occurred, check if it is a connection close error
@@ -308,14 +321,14 @@ func initLogging() {
 func initMetrics() {
 	if config.MetricsEnabled {
 		prometheus.MustRegister(prom.DnsQueriesTotal)
-		prometheus.MustRegister(prom.SuccessfulResolutionsTotal)
-		prometheus.MustRegister(prom.ZeroResolutionsTotal)
-		prometheus.MustRegister(prom.ReloadHostsTotal)
-		prometheus.MustRegister(prom.CacheHitResponseTotal)
 		prometheus.MustRegister(prom.RequestsQTypeTotal)
 		prometheus.MustRegister(prom.RequestedDomainNameCounter)
 		prometheus.MustRegister(prom.BlockedDomainNameCounter)
 		prometheus.MustRegister(prom.NXDomainNameCounter)
+		prometheus.MustRegister(prom.SuccessfulResolutionsTotal)
+		prometheus.MustRegister(prom.CacheHitResponseTotal)
+		prometheus.MustRegister(prom.ZeroResolutionsTotal)
+		prometheus.MustRegister(prom.ReloadHostsTotal)
 	}
 }
 
@@ -334,6 +347,19 @@ func SigtermHandler(signal os.Signal) {
 // TEST FUNCTIONS ------------------------------------------------------------- //
 
 // Space - Test function
+// Функция, которая инкрементирует счетчик.
+func incrementCounter(counterName string) {
+	// Вместо этого места вы можете использовать вашу библиотеку метрик.
+	fmt.Println("Incrementing counter:", counterName)
+}
+
+// Функция для обработки задач в пуле горутин.
+func worker(tasks <-chan string, wg *sync.WaitGroup) {
+	defer wg.Done()
+	for task := range tasks {
+		incrementCounter(task)
+	}
+}
 
 // ---------------------------------------------------------------------------- //
 
@@ -416,6 +442,7 @@ func main() {
 	regexMap = make(map[string]*regexp.Regexp)
 	permanentRegexMap = make(map[string]*regexp.Regexp)
 	cache.GlobalCache.Store = make(map[string]*cache.CacheEntry)
+	prom.CounterChannel = make(chan string, 1000)
 	mu.Unlock()
 
 	// Init Prometheus metrics and Logging -------------------------------------- //
@@ -474,6 +501,15 @@ func main() {
 		for host := range hosts {
 			fmt.Println(host)
 		}
+	}
+
+	// Run CounterChanne goroutine
+	// Определяем размер пула горутин.
+	poolSize := 5
+	wg.Add(poolSize)
+	// Создаем пул горутин.
+	for i := 0; i < poolSize; i++ {
+		go worker(prom.CounterChannel, wg)
 	}
 
 	// Run DNS server ----------------------------------------------------------- //
@@ -565,6 +601,8 @@ func main() {
 
 	// End of program ----------------------------------------------------------- //
 
+	// Close CounterChanne
+	close(prom.CounterChannel)
 	// Waiting for all goroutines to complete and ensure exit
 	wg.Wait()
 	os.Exit(exitcode)

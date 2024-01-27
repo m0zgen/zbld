@@ -168,12 +168,15 @@ func GetQTypeAnswer(hostName string, question dns.Question, upstreamAddr string)
 		}
 		if err == nil && len(respA.Answer) > 0 {
 			cache.WriteToCache(key, createCacheEntryFromA(respA))
-			defer prom.RequestsQTypeTotal.WithLabelValues("TypeA").Inc()
+			// Инкрементируем метрику в горутине
+			prom.IncrementRequestsQTypeTotal("TypeA")
 			return respA.Answer, nil
 		}
 	case dns.TypeAAAA:
 		respAAAA, _, err := client.Exchange(m, upstreamAddr)
-		defer prom.RequestsQTypeTotal.WithLabelValues("TypeAAAA").Inc()
+		//defer prom.RequestsQTypeTotal.WithLabelValues("TypeAAAA").Inc()
+		// Increment metric in a goroutine
+		prom.IncrementRequestsQTypeTotal("TypeAAAA")
 		return processResponse(m, respAAAA, key, err)
 	case dns.TypeHTTPS:
 		respHTTPS, _, err := client.Exchange(m, upstreamAddr)

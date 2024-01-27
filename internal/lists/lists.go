@@ -221,7 +221,8 @@ func LoadHostsWithInterval(filename string, interval time.Duration, regexMap map
 			if err := loadHosts(filename, useRemoteHosts, hostsFileURL, regexMap, targetMap); err != nil {
 				log.Fatalf("Error loading hosts file: %v", err)
 			}
-			prom.ReloadHostsTotal.Inc()
+			//prom.ReloadHostsTotal.Inc()
+			prom.IncrementReloadHostsTotal()
 			mu.Unlock()
 			time.Sleep(interval)
 		}
@@ -239,7 +240,8 @@ func LoadPermanentHostsWithInterval(filename string, interval time.Duration, reg
 			if err := loadHosts(filename, useRemoteHosts, permanentFileURL, regexMap, targetMap); err != nil {
 				log.Fatalf("Error loading permanent hosts file: %v", err)
 			}
-			prom.ReloadHostsTotal.Inc()
+			//prom.ReloadHostsTotal.Inc()
+			prom.IncrementReloadHostsTotal()
 			mu.Unlock()
 			time.Sleep(interval)
 		}
@@ -257,7 +259,8 @@ func LoadRegexWithInterval(filename string, interval time.Duration, regexMap map
 			if err := loadHostsAndRegex(filename, regexMap, targetMap); err != nil {
 				log.Fatalf("Error loading hosts and regex file: %v", err)
 			}
-			prom.ReloadHostsTotal.Inc()
+			//prom.ReloadHostsTotal.Inc()
+			prom.IncrementReloadHostsTotal()
 			mu.Unlock()
 			time.Sleep(interval)
 		}
