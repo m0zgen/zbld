@@ -59,12 +59,14 @@ func entryInCache(m *dns.Msg, host string, question dns.Question) (bool, []dns.R
 		} else {
 			prom.IncrementRequestedDomainNameCounter(host)
 		}
+
 		prom.IncrementCacheTotal()
 
 		if time.Since(entry.CreationTime) > entry.TTL {
 			cache.GlobalCache.Lock()
 			log.Println("Entry is expired. Deleting from cache:", key)
 			delete(cache.GlobalCache.Store, key)
+			counterMap.Del(host)
 			cache.GlobalCache.Unlock()
 		}
 

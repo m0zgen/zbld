@@ -5,31 +5,38 @@ import (
 	"sync"
 )
 
-// CounterMap представляет собой карту со счетчиками
+// CounterMap is a map with counters
 type CounterMap struct {
 	sync.RWMutex
 	m map[string]int
 }
 
-// NewCounterMap создает новую CounterMap
+// NewCounterMap - create new CounterMap
 func NewCounterMap() *CounterMap {
 	return &CounterMap{
 		m: make(map[string]int),
 	}
 }
 
-// Get возвращает значение счетчика для указанного ключа
+// Get - return counter value for key
 func (cm *CounterMap) Get(key string) int {
 	cm.RLock()
 	defer cm.RUnlock()
 	return cm.m[key]
 }
 
-// Inc увеличивает значение счетчика для указанного ключа на 1
+// Inc - increment counter for key by 1
 func (cm *CounterMap) Inc(key string) {
 	cm.Lock()
 	defer cm.Unlock()
 	cm.m[key]++
+}
+
+// Del - delete element from map by key
+func (cm *CounterMap) Del(key string) {
+	cm.Lock()
+	defer cm.Unlock()
+	delete(cm.m, key)
 }
 
 func main() {
