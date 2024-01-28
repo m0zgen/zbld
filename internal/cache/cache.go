@@ -10,11 +10,11 @@ import (
 
 // CacheEntry - Cache entries structure
 type CacheEntry struct {
-	IPv4         []net.IP
-	IPv6         []net.IP
-	CreationTime time.Time
-	TTL          time.Duration
-	DnsMsg       *dns.Msg
+	IPv4         []net.IP      // IPv4 addresses from A records
+	IPv6         []net.IP      // IPv6 addresses from AAAA records
+	CreationTime time.Time     // Creation time
+	TTL          time.Duration // Store till to this time
+	DnsMsg       *dns.Msg      // DNS message (Answer)
 }
 
 // Cache - Structure for storing cache entries

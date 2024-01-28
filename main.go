@@ -20,6 +20,7 @@ import (
 	"time"
 	"zdns/internal/cache"
 	"zdns/internal/config"
+	"zdns/internal/counter"
 	"zdns/internal/fs"
 	"zdns/internal/lists"
 	"zdns/internal/prometheus"
@@ -34,6 +35,7 @@ var hosts map[string]bool
 var permanentHosts map[string]bool
 var regexMap map[string]*regexp.Regexp
 var permanentRegexMap map[string]*regexp.Regexp
+var counterMap *counter.CounterMap
 var mu sync.Mutex
 
 //var upstreamServers []string
@@ -52,11 +54,11 @@ func entryInCache(m *dns.Msg, host string, question dns.Question) (bool, []dns.R
 			log.Println("Cache hit answer for:", host)
 		}
 		m.Answer = append(m.Answer, entry.DnsMsg.Answer...)
-
-		// Send metric cpint to goroutine
-		//go func() {
-		//	prom.CacheHitResponseTotal.Inc()
-		//}()
+		if counterMap.Get(host) <= 10 {
+			counterMap.Inc(host)
+		} else {
+			prom.IncrementRequestedDomainNameCounter(host)
+		}
 		prom.IncrementCacheTotal()
 
 		if time.Since(entry.CreationTime) > entry.TTL {
@@ -202,6 +204,7 @@ func getQTypeResponse(m *dns.Msg, question dns.Question, host string, clientIP n
 			prom.IncrementSuccessfulResolutionsTotal()
 		} else {
 			log.Println("Answer is empty set response code to (NXDOMAIN) for:", host, dns.RcodeNameError)
+			prom.IncrementNXDomainNameCounter(question.Name)
 			setResponseCode(m, dns.RcodeNameError)
 		}
 		//} else {
@@ -212,7 +215,6 @@ func getQTypeResponse(m *dns.Msg, question dns.Question, host string, clientIP n
 		// If IPv4 address is not available, set response code to code from MsgHdr.Rcode (resp.MsgHdr.Rcode)
 		log.Println("Qtype is not allowed <num>. See allowed Qtypes in <[A AAAA ..]>:", question.Qtype, config.AllowedQtypes)
 		//prom.NXDomainNameCounter.WithLabelValues(question.Name).Inc()
-		prom.IncrementNXDomainNameCounter(question.Name)
 		setResponseCode(m, dns.RcodeRefused)
 	}
 
@@ -248,7 +250,7 @@ func handleDNSRequest(w dns.ResponseWriter, r *dns.Msg, regexMap map[string]*reg
 		matching := lists.IsMatching(_host, regexMap)
 		permanentMatching := permanentHosts[_host] || (lists.IsMatching(_host, permanentRegexMap) && config.PermanentEnabled)
 		//prom.RequestedDomainNameCounter.WithLabelValues(_host).Inc()
-		prom.IncrementRequestedDomainNameCounter(_host)
+		//prom.IncrementRequestedDomainNameCounter(_host)
 		//mu.Lock()
 		upstreamDefault := upstreams.GetUpstreamServer(config.UpstreamDNSServers, config.BalancingStrategy)
 		// Check cache before requesting upstream DNS server
@@ -280,7 +282,6 @@ func handleDNSRequest(w dns.ResponseWriter, r *dns.Msg, regexMap map[string]*reg
 		}
 		//mu.Unlock()
 	}
-	//defer prom.DnsQueriesTotal.Inc()
 	prom.IncrementDnsQueriesTotal()
 	// Send response to client and try to write response
 	err := w.WriteMsg(m)
@@ -347,13 +348,18 @@ func SigtermHandler(signal os.Signal) {
 // TEST FUNCTIONS ------------------------------------------------------------- //
 
 // Space - Test function
-// Функция, которая инкрементирует счетчик.
+// incrementCounter - Test function for messages counting
 func incrementCounter(counterName string) {
 	// Вместо этого места вы можете использовать вашу библиотеку метрик.
-	fmt.Println("Incrementing counter:", counterName)
+	if config.IsDebug {
+		log.Println("Incrementing counter:", counterName)
+	}
 }
 
-// Функция для обработки задач в пуле горутин.
+// Funcion for processing tasks in goroutine pool.
+// Tasks are taken from tasks channel.
+// When the channel is closed, the goroutine stops working.
+// worker - Test function for messages counting
 func worker(tasks <-chan string, wg *sync.WaitGroup) {
 	defer wg.Done()
 	for task := range tasks {
@@ -442,6 +448,7 @@ func main() {
 	regexMap = make(map[string]*regexp.Regexp)
 	permanentRegexMap = make(map[string]*regexp.Regexp)
 	cache.GlobalCache.Store = make(map[string]*cache.CacheEntry)
+	counterMap = counter.NewCounterMap()
 	prom.CounterChannel = make(chan string, 1000)
 	mu.Unlock()
 
@@ -504,10 +511,10 @@ func main() {
 	}
 
 	// Run CounterChanne goroutine
-	// Определяем размер пула горутин.
+	// Define goroutine pool size.
 	poolSize := 5
 	wg.Add(poolSize)
-	// Создаем пул горутин.
+	// Create goroutine pool.
 	for i := 0; i < poolSize; i++ {
 		go worker(prom.CounterChannel, wg)
 	}
