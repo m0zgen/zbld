@@ -245,7 +245,7 @@ func handleDNSRequest(w dns.ResponseWriter, r *dns.Msg, regexMap map[string]*reg
 	}
 
 	for _, question := range r.Question {
-		log.Println("Received query for:", question.Name, dns.TypeToString[question.Qtype])
+		log.Println("Received query for:", question.Name, clientIP, dns.TypeToString[question.Qtype])
 		host := question.Name
 		// Delete dot from the end of FQDN
 		_host := strings.TrimRight(host, ".")
@@ -274,7 +274,7 @@ func handleDNSRequest(w dns.ResponseWriter, r *dns.Msg, regexMap map[string]*reg
 				} else if config.Inverse {
 					//if !entryInCache(m, host, question) {
 					//upstreamDefault := upstreams.GetUpstreamServer(config.UpstreamDNSServers, config.BalancingStrategy)
-					log.Println("Resolving with default upstream server (inverse mode):", upstreamDefault)
+					log.Println("Resolving with default upstream server (inverse mode):", _host, clientIP, upstreamDefault)
 					getQTypeResponse(m, question, host, clientIP, upstreamDefault)
 					//}
 				} else {
@@ -514,7 +514,7 @@ func main() {
 
 	// Run CounterChanne goroutine
 	// Define goroutine pool size.
-	poolSize := 5
+	poolSize := 10
 	wg.Add(poolSize)
 	// Create goroutine pool.
 	for i := 0; i < poolSize; i++ {

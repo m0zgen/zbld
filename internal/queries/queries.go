@@ -8,7 +8,6 @@ import (
 	"time"
 	"zdns/internal/cache"
 	configuration "zdns/internal/config"
-	"zdns/internal/prometheus"
 )
 
 var configCacheTTLSeconds int
@@ -159,25 +158,29 @@ func GetQTypeAnswer(hostName string, question dns.Question, upstreamAddr string)
 	client := dns.Client{}
 	m := &dns.Msg{}
 	m.SetQuestion(dns.Fqdn(hostName), question.Qtype)
+	resp, _, err := client.Exchange(m, upstreamAddr)
+	if err != nil {
+		return nil, err
+	}
 
 	switch question.Qtype {
 	case dns.TypeA:
-		respA, _, err := client.Exchange(m, upstreamAddr)
-		if err != nil {
-			return nil, err
-		}
-		if err == nil && len(respA.Answer) > 0 {
-			cache.WriteToCache(key, createCacheEntryFromA(respA))
-			// Инкрементируем метрику в горутине
-			prom.IncrementRequestsQTypeTotal("TypeA")
-			return respA.Answer, nil
-		}
+		//respA, _, err := client.Exchange(m, upstreamAddr)
+		//prom.IncrementRequestsQTypeTotal("TypeA")
+		return processResponse(m, resp, key, err)
+		//if err != nil {
+		//	return nil, err
+		//}
+		//if err == nil && len(respA.Answer) > 0 {
+		//	cache.WriteToCache(key, createCacheEntryFromA(respA))
+		//	// Increment metric in a goroutine
+		//	//prom.IncrementRequestsQTypeTotal("TypeA")
+		//	return respA.Answer, nil
+		//}
 	case dns.TypeAAAA:
-		respAAAA, _, err := client.Exchange(m, upstreamAddr)
-		//defer prom.RequestsQTypeTotal.WithLabelValues("TypeAAAA").Inc()
-		// Increment metric in a goroutine
-		prom.IncrementRequestsQTypeTotal("TypeAAAA")
-		return processResponse(m, respAAAA, key, err)
+		//respAAAA, _, err := client.Exchange(m, upstreamAddr)
+		//prom.IncrementRequestsQTypeTotal("TypeAAAA")
+		return processResponse(m, resp, key, err)
 	case dns.TypeHTTPS:
 		respHTTPS, _, err := client.Exchange(m, upstreamAddr)
 		if err != nil {
@@ -190,11 +193,12 @@ func GetQTypeAnswer(hostName string, question dns.Question, upstreamAddr string)
 				log.Println("CNAME record found for:", hostName)
 				m.SetQuestion(respHTTPS.Answer[0].Header().Name, dns.TypeA)
 				respConvCN, _, errConv := client.Exchange(m, upstreamAddr)
-				if errConv != nil {
-					log.Printf("Failed to get TypeA response for %s. Error: %v\n", hostName, errConv)
-					return nil, errConv
-				}
-				return respConvCN.Answer, nil
+				return processResponse(m, respConvCN, key, errConv)
+				//if errConv != nil {
+				//	log.Printf("Failed to get TypeA response for %s. Error: %v\n", hostName, errConv)
+				//	return nil, errConv
+				//}
+				//return respConvCN.Answer, nil
 			}
 			cache.WriteToCache(key, createCacheEntryFromA(respHTTPS))
 			return respHTTPS.Answer, nil
@@ -202,47 +206,42 @@ func GetQTypeAnswer(hostName string, question dns.Question, upstreamAddr string)
 			// Re-request as TypeA
 			m.SetQuestion(hostName, dns.TypeA)
 			respConvA, _, errConv := client.Exchange(m, upstreamAddr)
-			if errConv != nil {
-				log.Printf("Failed to get TypeA response for %s. Error: %v\n", hostName, errConv)
-				return nil, errConv
-			}
-			m.Answer = respConvA.Answer
-			return respConvA.Answer, nil
+			return processResponse(m, respConvA, key, errConv)
+			//if errConv != nil {
+			//	log.Printf("Failed to get TypeA response for %s. Error: %v\n", hostName, errConv)
+			//	return nil, errConv
+			//}
+			//m.Answer = respConvA.Answer
+			//return respConvA.Answer, nil
 			//if hasSOARecords(respHTTPS) {
 			//	processA(respHTTPS.Ns, m)
 			//	return m.Answer, nil
 			//}
 		}
 	case dns.TypeCNAME:
-		respCNAME, _, err := client.Exchange(m, upstreamAddr)
-		return processResponse(m, respCNAME, key, err)
+		//respCNAME, _, err := client.Exchange(m, upstreamAddr)
+		return processResponse(m, resp, key, err)
 	case dns.TypeNS:
-		respNS, _, err := client.Exchange(m, upstreamAddr)
-		if err != nil {
-			return nil, err
-		}
-
-		if err == nil && len(respNS.Answer) > 0 {
-			return respNS.Answer, nil
-		}
+		return processResponse(m, resp, key, err)
+		//respNS, _, err := client.Exchange(m, upstreamAddr)
+		//if err != nil {
+		//	return nil, err
+		//}
+		//
+		//if err == nil && len(respNS.Answer) > 0 {
+		//	return respNS.Answer, nil
+		//}
 	case dns.TypeMX:
-		respMX, _, err := client.Exchange(m, upstreamAddr)
-		if err != nil {
-			return nil, err
-		}
-
-		if err == nil && len(respMX.Answer) > 0 {
-			return respMX.Answer, nil
-		}
+		return processResponse(m, resp, key, err)
 	case dns.TypePTR:
-		respPTR, _, err := client.Exchange(m, upstreamAddr)
-		return processResponse(m, respPTR, key, err)
+		//respPTR, _, err := client.Exchange(m, upstreamAddr)
+		return processResponse(m, resp, key, err)
 	case dns.TypeSOA:
-		respSOA, _, err := client.Exchange(m, upstreamAddr)
-		return processResponse(m, respSOA, key, err)
+		//respSOA, _, err := client.Exchange(m, upstreamAddr)
+		return processResponse(m, resp, key, err)
 	case dns.TypeSRV:
-		respSRV, _, err := client.Exchange(m, upstreamAddr)
-		return processResponse(m, respSRV, key, err)
+		//respSRV, _, err := client.Exchange(m, upstreamAddr)
+		return processResponse(m, resp, key, err)
 	//TODO: TXT in a testing status, need to recheck this
 	case dns.TypeTXT:
 		msg := new(dns.Msg)
