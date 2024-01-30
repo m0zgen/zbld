@@ -17,6 +17,7 @@ type Config struct {
 	ConsoleMessage       string   `yaml:"console_message"`
 	ConsoleMessageEnable bool     `yaml:"console_message_enable"`
 	DNSPort              int      `yaml:"dns_port"`
+	EnableDNSTcp         bool     `yaml:"enable_dns_tcp"`
 	EnableLogging        bool     `yaml:"enable_logging"`
 	LogDir               string   `yaml:"log_dir"`
 	LogFile              string   `yaml:"log_file"`

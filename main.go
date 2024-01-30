@@ -531,22 +531,24 @@ func main() {
 		}
 	}()
 
-	// Run DNS server for TCP requests
-	wg.Add(1)
-	go func() {
-		defer wg.Done()
+	if config.EnableDNSTcp {
+		// Run DNS server for TCP requests
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
 
-		tcpServer := &dns.Server{Addr: fmt.Sprintf(":%d", config.DNSPort), Net: "tcp"}
-		dns.HandleFunc(".", func(w dns.ResponseWriter, r *dns.Msg) {
-			handleDNSRequest(w, r, regexMap)
-		})
+			tcpServer := &dns.Server{Addr: fmt.Sprintf(":%d", config.DNSPort), Net: "tcp"}
+			dns.HandleFunc(".", func(w dns.ResponseWriter, r *dns.Msg) {
+				handleDNSRequest(w, r, regexMap)
+			})
 
-		log.Printf("DNS server is listening on :%d (TCP)...\n", config.DNSPort)
-		err := tcpServer.ListenAndServe()
-		if err != nil {
-			log.Printf("Error starting DNS server (TCP): %s\n", err)
-		}
-	}()
+			log.Printf("DNS server is listening on :%d (TCP)...\n", config.DNSPort)
+			err := tcpServer.ListenAndServe()
+			if err != nil {
+				log.Printf("Error starting DNS server (TCP): %s\n", err)
+			}
+		}()
+	}
 
 	// Run Prometheus metrics server
 	if config.MetricsEnabled {
