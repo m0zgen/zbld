@@ -151,9 +151,7 @@ func returnZeroIP(m *dns.Msg, clientIP net.IP, host string) []dns.RR {
 	}
 	//m.SetRcode(m, dns.RcodeNameError)
 	log.Println("Zero response for:", clientIP, host)
-	//prom.ZeroResolutionsTotal.Inc()
 	prom.IncrementZeroResolutionsTotal()
-	//prom.BlockedDomainNameCounter.WithLabelValues(host).Inc()
 	prom.IncrementBlockedDomainNameCounter(host)
 	return m.Answer
 
@@ -184,8 +182,6 @@ func getQTypeResponse(m *dns.Msg, question dns.Question, host string, clientIP n
 			log.Println("Creating answer for allowed Qtype:", question.Qtype)
 		}
 
-		//stat, cachedAnswer := entryInCache(m, host, question)
-		//if !stat {
 		rAnswer, _ := queries.GetQTypeAnswer(host, question, upstreamAd)
 		if rAnswer != nil {
 			if config.IsDebug {
@@ -199,14 +195,10 @@ func getQTypeResponse(m *dns.Msg, question dns.Question, host string, clientIP n
 			prom.IncrementNXDomainNameCounter(question.Name)
 			setResponseCode(m, dns.RcodeNameError)
 		}
-		//} else {
-		//	m.Answer = append(m.Answer, cachedAnswer...)
-		//}
 
 	} else {
 		// If IPv4 address is not available, set response code to code from MsgHdr.Rcode (resp.MsgHdr.Rcode)
 		log.Println("Qtype is not allowed <num>. See allowed Qtypes in <[A AAAA ..]>:", question.Qtype, config.AllowedQtypes)
-		//prom.NXDomainNameCounter.WithLabelValues(question.Name).Inc()
 		setResponseCode(m, dns.RcodeRefused)
 	}
 
@@ -216,12 +208,11 @@ func getQTypeResponse(m *dns.Msg, question dns.Question, host string, clientIP n
 func handleDNSRequest(w dns.ResponseWriter, r *dns.Msg, regexMap map[string]*regexp.Regexp) {
 
 	var clientIP net.IP
-
 	m := new(dns.Msg)
 	m.SetReply(r)
 	m.Authoritative = true // Set authoritative flag to compress response or not
 
-	// Get client IP address from type
+	// Get client IP address from protocol
 	switch addr := w.RemoteAddr().(type) {
 	case *net.TCPAddr:
 		clientIP = addr.IP
@@ -241,10 +232,8 @@ func handleDNSRequest(w dns.ResponseWriter, r *dns.Msg, regexMap map[string]*reg
 		_host := strings.TrimRight(host, ".")
 		matching := lists.IsMatching(_host, regexMap)
 		permanentMatching := permanentHosts[_host] || (lists.IsMatching(_host, permanentRegexMap) && config.PermanentEnabled)
-		//prom.RequestedDomainNameCounter.WithLabelValues(_host).Inc()
-		//prom.IncrementRequestedDomainNameCounter(_host)
-		//mu.Lock()
 		upstreamDefault := upstreams.GetUpstreamServer(config.UpstreamDNSServers, config.BalancingStrategy)
+
 		// Check cache before requesting upstream DNS server
 		stat, _ := entryInCache(m, host, question)
 		if !stat {
@@ -272,7 +261,6 @@ func handleDNSRequest(w dns.ResponseWriter, r *dns.Msg, regexMap map[string]*reg
 				}
 			}
 		}
-		//mu.Unlock()
 	}
 	prom.IncrementDnsQueriesTotal()
 	// Send response to client and try to write response
@@ -408,8 +396,6 @@ func main() {
 			log.Fatal("Error parsing max age duration:", err)
 		}
 		fs.DeleteOldLogFiles(config.LogDir, maxAgeDuration)
-		//fs.DeleteOldLogFiles("users/logs", maxAgeDuration)
-
 	}
 
 	// Load hosts --------------------------------------------------------------- //
@@ -430,9 +416,6 @@ func main() {
 		config.PermanentWhitelisted = permanentFile
 	}
 
-	// Get upstream DNS servers array from config
-	//upstreamServers = config.UpstreamDNSServers
-
 	// Make init global maps vars
 	mu.Lock()
 	hosts = make(map[string]bool)
@@ -445,10 +428,7 @@ func main() {
 	mu.Unlock()
 
 	// Init Prometheus metrics and Logging -------------------------------------- //
-
-	// Init metrics
 	initMetrics()
-	// Enable logging
 	initLogging()
 	// Enable logging to file and stdout
 	if config.EnableLogging {
@@ -567,16 +547,6 @@ func main() {
 	// Run log files cleanup
 	if config.EnableLogging {
 		wg.Add(1) // Увеличиваем счетчик ожидаемых горутин до 2
-
-		// Горутина для удаления старых логов
-		//go func() {
-		//	defer wg.Done()
-		//	maxAgeDuration, err := time.ParseDuration(config.LogStoreDuration)
-		//	if err != nil {
-		//		log.Fatal("Error parsing max age duration:", err)
-		//	}
-		//	fs.DeleteOldLogFiles(config.LogDir, maxAgeDuration)
-		//}()
 
 		// Горутина для создания нового файла логов ежедневно
 		go func() {
