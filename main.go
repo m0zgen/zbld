@@ -48,13 +48,16 @@ func entryInCache(m *dns.Msg, host string, question dns.Question) (bool, []dns.R
 	key := cache.GenerateCacheKey(host, question.Qtype)
 	entry, ok := cache.CheckCache(key)
 	if ok {
-		if config.IsDebug {
+		switch config.IsDebug {
+		case true:
 			log.Println("Cache hit answer for:", host+"\n", entry.DnsMsg.Answer)
-		} else {
-			log.Println("Cache hit answer for:", host)
+		default:
+			log.Println("Cache hit answer for:", host, entry.IPv4, entry.IPv6)
 		}
+
 		m.Answer = append(m.Answer, entry.DnsMsg.Answer...)
 		if counterMap.Get(host) <= 10 {
+			//log.Println("Host count index:", counterMap.Get(host))
 			counterMap.Inc(host)
 		} else {
 			prom.IncrementRequestedDomainNameCounter(host)
@@ -63,11 +66,9 @@ func entryInCache(m *dns.Msg, host string, question dns.Question) (bool, []dns.R
 		prom.IncrementCacheTotal()
 
 		if time.Since(entry.CreationTime) > entry.TTL {
-			cache.GlobalCache.Lock()
 			log.Println("Entry is expired. Deleting from cache:", key)
-			delete(cache.GlobalCache.Store, key)
+			cache.Del(key)
 			counterMap.Del(host)
-			cache.GlobalCache.Unlock()
 		}
 
 		return true, m.Answer
