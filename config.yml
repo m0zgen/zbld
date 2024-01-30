@@ -54,7 +54,7 @@ use_remote_hosts: true
 # Local DNS server port
 dns_port: 50000
 # Enable DNS tcp server (udp enabled by default)
-enable_dns_tcp: false
+enable_dns_tcp: true
 
 # Settings for blocked domains
 # Default respond for blocked domains

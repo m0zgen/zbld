@@ -82,6 +82,7 @@ func Del(key string) {
 	delete(GlobalCache.Store, key)
 }
 
+// WriteToCache - Add records to GlobalCache
 func WriteToCache(key string, entry *CacheEntry) {
 	// Lock for write
 	GlobalCache.mu.Lock()
