@@ -56,7 +56,7 @@ func entryInCache(m *dns.Msg, host string, question dns.Question) (bool, []dns.R
 		}
 
 		m.Answer = append(m.Answer, entry.DnsMsg.Answer...)
-		if counterMap.Get(host) <= 10 {
+		if counterMap.Get(host) <= config.PromTopNameIncAfter {
 			//log.Println("Host count index:", counterMap.Get(host))
 			counterMap.Inc(host)
 		} else {

@@ -27,6 +27,7 @@ type Config struct {
 	CacheEnabled         bool     `yaml:"cache_enabled"`
 	MetricsEnabled       bool     `yaml:"metrics_enabled"`
 	MetricsPort          int      `yaml:"metrics_port"`
+	PromTopNameIncAfter  int      `yaml:"prom_top_name_inc_after"`
 	ConfigVersion        string   `yaml:"config_version"`
 	IsDebug              bool     `yaml:"is_debug"`
 	PermanentEnabled     bool     `yaml:"permanent_enabled"`
