@@ -25,6 +25,30 @@ func SetConfig(cfg *configuration.Config) {
 
 // Local functions ---------------------------------------------------------- //
 
+// qTypeToString - QType unit converter
+func qTypeToString(qtype uint16) string {
+	switch qtype {
+	case dns.TypeA:
+		return "TypeA"
+	case dns.TypeAAAA:
+		return "TypeAAAA"
+	case dns.TypeCNAME:
+		return "TypeCNAME"
+	case dns.TypeNS:
+		return "TypeNS"
+	case dns.TypeMX:
+		return "TypeMX"
+	case dns.TypePTR:
+		return "TypePTR"
+	case dns.TypeSOA:
+		return "TypeSOA"
+	case dns.TypeSRV:
+		return "TypeSRV"
+	default:
+		return fmt.Sprintf("UnknownType%d", qtype)
+	}
+}
+
 // hasSOARecords - Check if the response has SOA records
 func hasSOARecords(response *dns.Msg) bool {
 	// Check Answer section
@@ -151,28 +175,6 @@ func createCacheEntryFromA(resp *dns.Msg) *cache.CacheEntry {
 }
 
 // External functions ------------------------------------------------------- //
-func QTypeToString(qtype uint16) string {
-	switch qtype {
-	case dns.TypeA:
-		return "TypeA"
-	case dns.TypeAAAA:
-		return "TypeAAAA"
-	case dns.TypeCNAME:
-		return "TypeCNAME"
-	case dns.TypeNS:
-		return "TypeNS"
-	case dns.TypeMX:
-		return "TypeMX"
-	case dns.TypePTR:
-		return "TypePTR"
-	case dns.TypeSOA:
-		return "TypeSOA"
-	case dns.TypeSRV:
-		return "TypeSRV"
-	default:
-		return fmt.Sprintf("UnknownType%d", qtype)
-	}
-}
 
 // GetQTypeAnswer - Get answer for allowed Qtype
 func GetQTypeAnswer(hostName string, question dns.Question, upstreamAddr string) ([]dns.RR, error) {
@@ -188,8 +190,7 @@ func GetQTypeAnswer(hostName string, question dns.Question, upstreamAddr string)
 
 	switch question.Qtype {
 	case dns.TypeA, dns.TypeAAAA, dns.TypeCNAME, dns.TypeNS, dns.TypeMX, dns.TypePTR, dns.TypeSOA, dns.TypeSRV:
-		//respA, _, err := client.Exchange(m, upstreamAddr)
-		prom.IncrementRequestsQTypeTotal(QTypeToString(question.Qtype))
+		prom.IncrementRequestsQTypeTotal(qTypeToString(question.Qtype))
 		return processResponse(m, resp, key, err)
 
 	case dns.TypeHTTPS:
@@ -205,11 +206,6 @@ func GetQTypeAnswer(hostName string, question dns.Question, upstreamAddr string)
 				m.SetQuestion(respHTTPS.Answer[0].Header().Name, dns.TypeA)
 				respConvCN, _, errConv := client.Exchange(m, upstreamAddr)
 				return processResponse(m, respConvCN, key, errConv)
-				//if errConv != nil {
-				//	log.Printf("Failed to get TypeA response for %s. Error: %v\n", hostName, errConv)
-				//	return nil, errConv
-				//}
-				//return respConvCN.Answer, nil
 			}
 			cache.WriteToCache(key, createCacheEntryFromA(respHTTPS))
 			return respHTTPS.Answer, nil
