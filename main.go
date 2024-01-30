@@ -63,27 +63,16 @@ func entryInCache(m *dns.Msg, host string, question dns.Question) (bool, []dns.R
 			prom.IncrementRequestedDomainNameCounter(host)
 		}
 
-		prom.IncrementCacheTotal()
-
 		if time.Since(entry.CreationTime) > entry.TTL {
 			log.Println("Entry is expired. Deleting from cache:", key)
 			cache.Del(key)
 			counterMap.Del(host)
 		}
 
+		prom.IncrementCacheTotal()
 		return true, m.Answer
 	}
 
-	// Read from cache
-	//if entry, found := cache.CheckCache(host, question.Qtype); found {
-	//	log.Println("Cache hit from handler for:", host)
-	//	m.Answer = append(m.Answer, entry.DnsMsg.Answer...)
-	//	if config.IsDebug {
-	//		log.Printf("Answer: %s\n", entry.DnsMsg.Answer)
-	//	}
-	//	defer prom.CacheHitResponseTotal.Inc()
-	//	return true
-	//}
 	return false, nil
 }
 
