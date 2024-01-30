@@ -177,14 +177,14 @@ func QTypeToString(qtype uint16) string {
 // GetQTypeAnswer - Get answer for allowed Qtype
 func GetQTypeAnswer(hostName string, question dns.Question, upstreamAddr string) ([]dns.RR, error) {
 
-	key := cache.GenerateCacheKey(hostName, question.Qtype)
-	client := dns.Client{}
 	m := &dns.Msg{}
 	m.SetQuestion(dns.Fqdn(hostName), question.Qtype)
+	client := dns.Client{}
 	resp, _, err := client.Exchange(m, upstreamAddr)
 	if err != nil {
 		return nil, err
 	}
+	key := cache.GenerateCacheKey(hostName, question.Qtype)
 
 	switch question.Qtype {
 	case dns.TypeA, dns.TypeAAAA, dns.TypeCNAME, dns.TypeNS, dns.TypeMX, dns.TypePTR, dns.TypeSOA, dns.TypeSRV:
@@ -218,16 +218,6 @@ func GetQTypeAnswer(hostName string, question dns.Question, upstreamAddr string)
 			m.SetQuestion(hostName, dns.TypeA)
 			respConvA, _, errConv := client.Exchange(m, upstreamAddr)
 			return processResponse(m, respConvA, key, errConv)
-			//if errConv != nil {
-			//	log.Printf("Failed to get TypeA response for %s. Error: %v\n", hostName, errConv)
-			//	return nil, errConv
-			//}
-			//m.Answer = respConvA.Answer
-			//return respConvA.Answer, nil
-			//if hasSOARecords(respHTTPS) {
-			//	processA(respHTTPS.Ns, m)
-			//	return m.Answer, nil
-			//}
 		}
 
 	//TODO: TXT in a testing status, need to recheck this
