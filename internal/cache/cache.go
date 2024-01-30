@@ -75,6 +75,13 @@ func CheckCache(key string) (*CacheEntry, bool) {
 	return entry, ok
 }
 
+// Del - delete element from map by key
+func Del(key string) {
+	GlobalCache.mu.Lock()
+	defer GlobalCache.mu.Unlock()
+	delete(GlobalCache.Store, key)
+}
+
 func WriteToCache(key string, entry *CacheEntry) {
 	// Lock for write
 	GlobalCache.mu.Lock()
