@@ -20,6 +20,7 @@ import (
 	"time"
 	"zdns/internal/cache"
 	"zdns/internal/config"
+	"zdns/internal/counter"
 	"zdns/internal/fs"
 	"zdns/internal/lists"
 	"zdns/internal/prometheus"
@@ -34,6 +35,7 @@ var hosts map[string]bool
 var permanentHosts map[string]bool
 var regexMap map[string]*regexp.Regexp
 var permanentRegexMap map[string]*regexp.Regexp
+var counterMap *counter.CounterMap
 var mu sync.Mutex
 
 //var upstreamServers []string
@@ -46,32 +48,31 @@ func entryInCache(m *dns.Msg, host string, question dns.Question) (bool, []dns.R
 	key := cache.GenerateCacheKey(host, question.Qtype)
 	entry, ok := cache.CheckCache(key)
 	if ok {
-		if config.IsDebug {
+		switch config.IsDebug {
+		case true:
 			log.Println("Cache hit answer for:", host+"\n", entry.DnsMsg.Answer)
-		} else {
-			log.Println("Cache hit answer for:", host)
+		default:
+			log.Println("Cache hit answer for:", host, entry.IPv4, entry.IPv6)
 		}
+
 		m.Answer = append(m.Answer, entry.DnsMsg.Answer...)
-		if time.Since(entry.CreationTime) > entry.TTL {
-			cache.GlobalCache.Lock()
-			log.Println("Entry is expired. Deleting from cache:", key)
-			delete(cache.GlobalCache.Store, key)
-			cache.GlobalCache.Unlock()
+		if counterMap.Get(host) <= config.PromTopNameIncAfter {
+			//log.Println("Host count index:", counterMap.Get(host))
+			counterMap.Inc(host)
+		} else {
+			prom.IncrementRequestedDomainNameCounter(host)
 		}
-		defer prom.CacheHitResponseTotal.Inc()
+
+		if time.Since(entry.CreationTime) > entry.TTL {
+			log.Println("Entry is expired. Deleting from cache:", key)
+			cache.Del(key)
+			counterMap.Del(host)
+		}
+
+		prom.IncrementCacheTotal()
 		return true, m.Answer
 	}
 
-	// Read from cache
-	//if entry, found := cache.CheckCache(host, question.Qtype); found {
-	//	log.Println("Cache hit from handler for:", host)
-	//	m.Answer = append(m.Answer, entry.DnsMsg.Answer...)
-	//	if config.IsDebug {
-	//		log.Printf("Answer: %s\n", entry.DnsMsg.Answer)
-	//	}
-	//	defer prom.CacheHitResponseTotal.Inc()
-	//	return true
-	//}
 	return false, nil
 }
 
@@ -150,8 +151,8 @@ func returnZeroIP(m *dns.Msg, clientIP net.IP, host string) []dns.RR {
 	}
 	//m.SetRcode(m, dns.RcodeNameError)
 	log.Println("Zero response for:", clientIP, host)
-	prom.ZeroResolutionsTotal.Inc()
-	prom.BlockedDomainNameCounter.WithLabelValues(host).Inc()
+	prom.IncrementZeroResolutionsTotal()
+	prom.IncrementBlockedDomainNameCounter(host)
 	return m.Answer
 
 }
@@ -181,27 +182,23 @@ func getQTypeResponse(m *dns.Msg, question dns.Question, host string, clientIP n
 			log.Println("Creating answer for allowed Qtype:", question.Qtype)
 		}
 
-		//stat, cachedAnswer := entryInCache(m, host, question)
-		//if !stat {
 		rAnswer, _ := queries.GetQTypeAnswer(host, question, upstreamAd)
 		if rAnswer != nil {
 			if config.IsDebug {
 				log.Printf("Answer: %s\n", rAnswer)
 			}
 			m.Answer = append(m.Answer, rAnswer...)
-			prom.SuccessfulResolutionsTotal.Inc()
+			//prom.SuccessfulResolutionsTotal.Inc()
+			prom.IncrementSuccessfulResolutionsTotal()
 		} else {
 			log.Println("Answer is empty set response code to (NXDOMAIN) for:", host, dns.RcodeNameError)
+			prom.IncrementNXDomainNameCounter(question.Name)
 			setResponseCode(m, dns.RcodeNameError)
 		}
-		//} else {
-		//	m.Answer = append(m.Answer, cachedAnswer...)
-		//}
 
 	} else {
 		// If IPv4 address is not available, set response code to code from MsgHdr.Rcode (resp.MsgHdr.Rcode)
 		log.Println("Qtype is not allowed <num>. See allowed Qtypes in <[A AAAA ..]>:", question.Qtype, config.AllowedQtypes)
-		prom.NXDomainNameCounter.WithLabelValues(question.Name).Inc()
 		setResponseCode(m, dns.RcodeRefused)
 	}
 
@@ -211,12 +208,11 @@ func getQTypeResponse(m *dns.Msg, question dns.Question, host string, clientIP n
 func handleDNSRequest(w dns.ResponseWriter, r *dns.Msg, regexMap map[string]*regexp.Regexp) {
 
 	var clientIP net.IP
-
 	m := new(dns.Msg)
 	m.SetReply(r)
 	m.Authoritative = true // Set authoritative flag to compress response or not
 
-	// Get client IP address from type
+	// Get client IP address from protocol
 	switch addr := w.RemoteAddr().(type) {
 	case *net.TCPAddr:
 		clientIP = addr.IP
@@ -230,15 +226,14 @@ func handleDNSRequest(w dns.ResponseWriter, r *dns.Msg, regexMap map[string]*reg
 	}
 
 	for _, question := range r.Question {
-		log.Println("Received query for:", question.Name, dns.TypeToString[question.Qtype])
+		log.Println("Received query for:", question.Name, clientIP, dns.TypeToString[question.Qtype])
 		host := question.Name
 		// Delete dot from the end of FQDN
 		_host := strings.TrimRight(host, ".")
 		matching := lists.IsMatching(_host, regexMap)
 		permanentMatching := permanentHosts[_host] || (lists.IsMatching(_host, permanentRegexMap) && config.PermanentEnabled)
-		prom.RequestedDomainNameCounter.WithLabelValues(_host).Inc()
-		//mu.Lock()
 		upstreamDefault := upstreams.GetUpstreamServer(config.UpstreamDNSServers, config.BalancingStrategy)
+
 		// Check cache before requesting upstream DNS server
 		stat, _ := entryInCache(m, host, question)
 		if !stat {
@@ -258,7 +253,7 @@ func handleDNSRequest(w dns.ResponseWriter, r *dns.Msg, regexMap map[string]*reg
 				} else if config.Inverse {
 					//if !entryInCache(m, host, question) {
 					//upstreamDefault := upstreams.GetUpstreamServer(config.UpstreamDNSServers, config.BalancingStrategy)
-					log.Println("Resolving with default upstream server (inverse mode):", upstreamDefault)
+					log.Println("Resolving with default upstream server (inverse mode):", _host, clientIP, upstreamDefault)
 					getQTypeResponse(m, question, host, clientIP, upstreamDefault)
 					//}
 				} else {
@@ -266,9 +261,8 @@ func handleDNSRequest(w dns.ResponseWriter, r *dns.Msg, regexMap map[string]*reg
 				}
 			}
 		}
-		//mu.Unlock()
 	}
-	defer prom.DnsQueriesTotal.Inc()
+	prom.IncrementDnsQueriesTotal()
 	// Send response to client and try to write response
 	err := w.WriteMsg(m)
 	// If error is occurred, check if it is a connection close error
@@ -308,14 +302,14 @@ func initLogging() {
 func initMetrics() {
 	if config.MetricsEnabled {
 		prometheus.MustRegister(prom.DnsQueriesTotal)
-		prometheus.MustRegister(prom.SuccessfulResolutionsTotal)
-		prometheus.MustRegister(prom.ZeroResolutionsTotal)
-		prometheus.MustRegister(prom.ReloadHostsTotal)
-		prometheus.MustRegister(prom.CacheHitResponseTotal)
 		prometheus.MustRegister(prom.RequestsQTypeTotal)
 		prometheus.MustRegister(prom.RequestedDomainNameCounter)
 		prometheus.MustRegister(prom.BlockedDomainNameCounter)
 		prometheus.MustRegister(prom.NXDomainNameCounter)
+		prometheus.MustRegister(prom.SuccessfulResolutionsTotal)
+		prometheus.MustRegister(prom.CacheHitResponseTotal)
+		prometheus.MustRegister(prom.ZeroResolutionsTotal)
+		prometheus.MustRegister(prom.ReloadHostsTotal)
 	}
 }
 
@@ -334,6 +328,24 @@ func SigtermHandler(signal os.Signal) {
 // TEST FUNCTIONS ------------------------------------------------------------- //
 
 // Space - Test function
+// incrementCounter - Test function for messages counting
+func incrementCounter(counterName string) {
+	// Вместо этого места вы можете использовать вашу библиотеку метрик.
+	if config.IsDebug {
+		log.Println("Incrementing counter:", counterName)
+	}
+}
+
+// Funcion for processing tasks in goroutine pool.
+// Tasks are taken from tasks channel.
+// When the channel is closed, the goroutine stops working.
+// worker - Test function for messages counting
+func worker(tasks <-chan string, wg *sync.WaitGroup) {
+	defer wg.Done()
+	for task := range tasks {
+		incrementCounter(task)
+	}
+}
 
 // ---------------------------------------------------------------------------- //
 
@@ -384,8 +396,6 @@ func main() {
 			log.Fatal("Error parsing max age duration:", err)
 		}
 		fs.DeleteOldLogFiles(config.LogDir, maxAgeDuration)
-		//fs.DeleteOldLogFiles("users/logs", maxAgeDuration)
-
 	}
 
 	// Load hosts --------------------------------------------------------------- //
@@ -406,9 +416,6 @@ func main() {
 		config.PermanentWhitelisted = permanentFile
 	}
 
-	// Get upstream DNS servers array from config
-	//upstreamServers = config.UpstreamDNSServers
-
 	// Make init global maps vars
 	mu.Lock()
 	hosts = make(map[string]bool)
@@ -416,13 +423,12 @@ func main() {
 	regexMap = make(map[string]*regexp.Regexp)
 	permanentRegexMap = make(map[string]*regexp.Regexp)
 	cache.GlobalCache.Store = make(map[string]*cache.CacheEntry)
+	counterMap = counter.NewCounterMap()
+	prom.CounterChannel = make(chan string, 1000)
 	mu.Unlock()
 
 	// Init Prometheus metrics and Logging -------------------------------------- //
-
-	// Init metrics
 	initMetrics()
-	// Enable logging
 	initLogging()
 	// Enable logging to file and stdout
 	if config.EnableLogging {
@@ -476,6 +482,15 @@ func main() {
 		}
 	}
 
+	// Run CounterChanne goroutine
+	// Define goroutine pool size.
+	poolSize := 10
+	wg.Add(poolSize)
+	// Create goroutine pool.
+	for i := 0; i < poolSize; i++ {
+		go worker(prom.CounterChannel, wg)
+	}
+
 	// Run DNS server ----------------------------------------------------------- //
 
 	// Add goroutines for DNS instances running
@@ -496,22 +511,24 @@ func main() {
 		}
 	}()
 
-	// Run DNS server for TCP requests
-	wg.Add(1)
-	go func() {
-		defer wg.Done()
+	if config.EnableDNSTcp {
+		// Run DNS server for TCP requests
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
 
-		tcpServer := &dns.Server{Addr: fmt.Sprintf(":%d", config.DNSPort), Net: "tcp"}
-		dns.HandleFunc(".", func(w dns.ResponseWriter, r *dns.Msg) {
-			handleDNSRequest(w, r, regexMap)
-		})
+			tcpServer := &dns.Server{Addr: fmt.Sprintf(":%d", config.DNSPort), Net: "tcp"}
+			dns.HandleFunc(".", func(w dns.ResponseWriter, r *dns.Msg) {
+				handleDNSRequest(w, r, regexMap)
+			})
 
-		log.Printf("DNS server is listening on :%d (TCP)...\n", config.DNSPort)
-		err := tcpServer.ListenAndServe()
-		if err != nil {
-			log.Printf("Error starting DNS server (TCP): %s\n", err)
-		}
-	}()
+			log.Printf("DNS server is listening on :%d (TCP)...\n", config.DNSPort)
+			err := tcpServer.ListenAndServe()
+			if err != nil {
+				log.Printf("Error starting DNS server (TCP): %s\n", err)
+			}
+		}()
+	}
 
 	// Run Prometheus metrics server
 	if config.MetricsEnabled {
@@ -530,16 +547,6 @@ func main() {
 	// Run log files cleanup
 	if config.EnableLogging {
 		wg.Add(1) // Увеличиваем счетчик ожидаемых горутин до 2
-
-		// Горутина для удаления старых логов
-		//go func() {
-		//	defer wg.Done()
-		//	maxAgeDuration, err := time.ParseDuration(config.LogStoreDuration)
-		//	if err != nil {
-		//		log.Fatal("Error parsing max age duration:", err)
-		//	}
-		//	fs.DeleteOldLogFiles(config.LogDir, maxAgeDuration)
-		//}()
 
 		// Горутина для создания нового файла логов ежедневно
 		go func() {
@@ -565,6 +572,8 @@ func main() {
 
 	// End of program ----------------------------------------------------------- //
 
+	// Close CounterChanne
+	close(prom.CounterChannel)
 	// Waiting for all goroutines to complete and ensure exit
 	wg.Wait()
 	os.Exit(exitcode)

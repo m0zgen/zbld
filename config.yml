@@ -53,6 +53,8 @@ use_remote_hosts: true
 # DNS server settings
 # Local DNS server port
 dns_port: 50000
+# Enable DNS tcp server (udp enabled by default)
+enable_dns_tcp: true
 
 # Settings for blocked domains
 # Default respond for blocked domains
@@ -74,11 +76,14 @@ log_file: "zdns_root"
 # If enable_cache is set to true, then the results of DNS queries will be cached
 cache_enabled: true
 # Stale cache entries will be removed after this many seconds
-cache_ttl_seconds: 60
+cache_ttl_seconds: 3600
 
 # Prometheus Metrics
 metrics_enabled: true
 metrics_port: 40000
+# Extra metrics settings
+# Prometheus top name increment after N requests for unique domains
+prom_top_name_inc_after: 10
 
 # Users management
 user_hosts_template: "addits/templates/user-hosts.txt"
