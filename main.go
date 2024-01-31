@@ -205,7 +205,7 @@ func getQTypeResponse(m *dns.Msg, question dns.Question, host string, clientIP n
 }
 
 // handleDNSRequest - Handle DNS request from client
-func handleDNSRequest(w dns.ResponseWriter, r *dns.Msg, regexMap map[string]*regexp.Regexp) {
+func handleDNSRequest(w dns.ResponseWriter, r *dns.Msg) {
 
 	var clientIP net.IP
 	m := new(dns.Msg)
@@ -508,7 +508,7 @@ func main() {
 
 		udpServer := &dns.Server{Addr: fmt.Sprintf(":%d", config.DNSPort), Net: "udp"}
 		dns.HandleFunc(".", func(w dns.ResponseWriter, r *dns.Msg) {
-			handleDNSRequest(w, r, regexMap)
+			handleDNSRequest(w, r)
 		})
 
 		log.Printf("DNS server is listening on :%d (UDP)...\n", config.DNSPort)
@@ -526,7 +526,7 @@ func main() {
 
 			tcpServer := &dns.Server{Addr: fmt.Sprintf(":%d", config.DNSPort), Net: "tcp"}
 			dns.HandleFunc(".", func(w dns.ResponseWriter, r *dns.Msg) {
-				handleDNSRequest(w, r, regexMap)
+				handleDNSRequest(w, r)
 			})
 
 			log.Printf("DNS server is listening on :%d (TCP)...\n", config.DNSPort)
