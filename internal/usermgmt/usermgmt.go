@@ -483,7 +483,6 @@ func GenerateUserConfig(usernameWithAlias string, force bool) {
 
 	generateUserCatalog(username, force)
 	applyNewConfig("users/"+username+"/"+newFilename, tmpl, newUserConfig)
-	fmt.Println("doh:", username+"-"+useralias)
-	fmt.Println("port:", strconv.Itoa(updatedDNSPort))
+	fmt.Printf("Summary: %s-%s,%s\n", username, useralias, strconv.Itoa(updatedDNSPort))
 	os.Exit(0)
 }
