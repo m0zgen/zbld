@@ -360,9 +360,10 @@ func main() {
 	// Parse command line arguments
 	addUserFlag := flag.String("adduser", "", "Username for configuration")
 	delUserFlag := flag.String("deluser", "", "Username for deletion")
-	listUsersFlag := flag.Bool("listusers", false, "List existing users")
 	forceFlag := flag.Bool("force", false, "Force operations")
 	clearLogsFlag := flag.Bool("clearlogs", false, "Clear logs")
+	listUsersFlag := flag.Bool("listusers", false, "List existing users")
+	summaryFlag := flag.Bool("summary", false, "Show summary user info")
 	// Another flags
 	flag.StringVar(&configFile, "config", "config.yml", "Config file path")
 	flag.StringVar(&hostsFile, "hosts", "hosts.txt", "Hosts file path")
@@ -392,7 +393,7 @@ func main() {
 
 	if *listUsersFlag {
 		users.SetConfig(&config)
-		users.ListUsers(config.UsersDir)
+		users.ListUsers(config.UsersDir, *summaryFlag)
 	}
 
 	// Clear logs if -clearlogs argument is passed

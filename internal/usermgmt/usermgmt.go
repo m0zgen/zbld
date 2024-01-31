@@ -16,7 +16,7 @@ import (
 	"zdns/internal/fs"
 )
 
-// UsrConfig - Struct for new user config
+// UsrConfig - Template struct for new user config
 type UsrConfig struct {
 	DNSPort       int
 	MetricsPort   int
@@ -35,11 +35,12 @@ var userConfigTemplate string
 var usersDir string
 var usersLogDir string
 
-// UserConfig - Struct for user config for list users needs
+// UserConfig - Struct for export yml config params (ListUsers function)
 type UserConfig struct {
 	UserName    string `yaml:"user_name"`
 	UserAlias   string `yaml:"user_alias"`
 	UserComment string `yaml:"user_comment"`
+	UserDNSPort string `yaml:"dns_port"`
 }
 
 // Config setter -------------------------------------------------------- //
@@ -206,10 +207,10 @@ func extractAlias(username string, extractAlias bool) string {
 }
 
 // readConfig - Read config file and return username and useralias for ListUsers function
-func readConfig(filePath string) (string, string, error) {
+func readConfig(filePath string) (string, string, string, string, error) {
 	file, err := os.Open(filePath)
 	if err != nil {
-		return "", "", err
+		return "", "", "", "", err
 	}
 	defer func(file *os.File) {
 		err := file.Close()
@@ -223,10 +224,10 @@ func readConfig(filePath string) (string, string, error) {
 	decoder := yaml.NewDecoder(file)
 	err = decoder.Decode(&config)
 	if err != nil {
-		return "", "", err
+		return "", "", "", "", err
 	}
 
-	return config.UserName, config.UserAlias, nil
+	return config.UserName, config.UserAlias, config.UserDNSPort, config.UserComment, nil
 }
 
 // Operations with users numbers ----------------------------------------- //
@@ -341,7 +342,7 @@ func DeleteTargetUser(username string, force bool) {
 }
 
 // ListUsers - List users from users directory
-func ListUsers(dir string) {
+func ListUsers(dir string, summary bool) {
 	files, err := os.ReadDir(dir)
 	if err != nil {
 		fmt.Println("Error read catalog:", err)
@@ -350,12 +351,16 @@ func ListUsers(dir string) {
 
 	for _, file := range files {
 		if file.IsDir() && strings.HasPrefix(file.Name(), "user") {
-			userName, userAlias, err := readConfig(filepath.Join(dir, file.Name(), "config.yml"))
+			userName, userAlias, userDNSPort, userComment, err := readConfig(filepath.Join(dir, file.Name(), "config.yml"))
 			if err != nil {
 				fmt.Printf("Ошибка чтения файла конфигурации для пользователя %s: %v\n", file.Name(), err)
 				continue
 			}
-			fmt.Printf("User Name: %s, User Alias: %s\n", userName, userAlias)
+			if summary {
+				fmt.Printf("%s-%s,%s\n", userName, userAlias, userDNSPort)
+			} else {
+				fmt.Printf("Name: %s, Alias: %s, Port: %s, Comment: %s\n", userName, userAlias, userDNSPort, userComment)
+			}
 		}
 	}
 	os.Exit(0)
