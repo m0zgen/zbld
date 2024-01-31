@@ -8,6 +8,7 @@ logs
 zdns.log
 tools/builds/prev
 tools
+tmp
 zdns
 !internal/users/*
 # Tests
