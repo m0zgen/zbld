@@ -3,6 +3,7 @@ package users
 import (
 	"bufio"
 	"fmt"
+	"gopkg.in/yaml.v2"
 	"log"
 	"os"
 	"path/filepath"
@@ -33,6 +34,13 @@ var userHostsPermTmpl string
 var userConfigTemplate string
 var usersDir string
 var usersLogDir string
+
+// UserConfig - Struct for user config for list users needs
+type UserConfig struct {
+	UserName    string `yaml:"user_name"`
+	UserAlias   string `yaml:"user_alias"`
+	UserComment string `yaml:"user_comment"`
+}
 
 // Config setter -------------------------------------------------------- //
 
@@ -197,7 +205,45 @@ func extractAlias(username string, extractAlias bool) string {
 
 }
 
+// readConfig - Read config file and return username and useralias for ListUsers function
+func readConfig(filePath string) (string, string, error) {
+	file, err := os.Open(filePath)
+	if err != nil {
+		return "", "", err
+	}
+	defer func(file *os.File) {
+		err := file.Close()
+		if err != nil {
+			fmt.Println("Error closing file:", err)
+			return
+		}
+	}(file)
+
+	var config UserConfig
+	decoder := yaml.NewDecoder(file)
+	err = decoder.Decode(&config)
+	if err != nil {
+		return "", "", err
+	}
+
+	return config.UserName, config.UserAlias, nil
+}
+
 // Operations with users numbers ----------------------------------------- //
+
+// isDigit returns true if the character is a digit
+func isDigit(c byte) bool {
+	return '0' <= c && c <= '9'
+}
+
+// updateNum - Update passed number (like as port) to user postfix number
+func updateNum(basePort, number int) int {
+	// Change last digits in basePort etc. params in config to extracted number
+	portStr := strconv.Itoa(basePort)
+	updatedPortStr := portStr[:len(portStr)-len(strconv.Itoa(number))] + strconv.Itoa(number)
+	updatedPort, _ := strconv.Atoi(updatedPortStr)
+	return updatedPort
+}
 
 // extractNumber - Extract number from username
 func extractNumber(s string) (int, error) {
@@ -217,20 +263,6 @@ func extractNumber(s string) (int, error) {
 	}
 
 	return number, nil
-}
-
-// isDigit returns true if the character is a digit
-func isDigit(c byte) bool {
-	return '0' <= c && c <= '9'
-}
-
-// updateNum - Update passed number (like as port) to user postfix number
-func updateNum(basePort, number int) int {
-	// Change last digits in basePort etc. params in config to extracted number
-	portStr := strconv.Itoa(basePort)
-	updatedPortStr := portStr[:len(portStr)-len(strconv.Itoa(number))] + strconv.Itoa(number)
-	updatedPort, _ := strconv.Atoi(updatedPortStr)
-	return updatedPort
 }
 
 // Operations with users config ----------------------------------------- //
@@ -259,7 +291,7 @@ func applyNewConfig(newFilename string, tmpl *template.Template, newUserConfig U
 	}
 
 	fmt.Println("Template applied and saved to", newFilename)
-	os.Exit(0)
+	//os.Exit(0)
 }
 
 // newUserConfig - Create new user struct config with updated data
@@ -306,6 +338,27 @@ func DeleteTargetUser(username string, force bool) {
 		log.Println("User not found:", dirPath)
 		os.Exit(1)
 	}
+}
+
+// ListUsers - List users from users directory
+func ListUsers(dir string) {
+	files, err := os.ReadDir(dir)
+	if err != nil {
+		fmt.Println("Error read catalog:", err)
+		return
+	}
+
+	for _, file := range files {
+		if file.IsDir() && strings.HasPrefix(file.Name(), "user") {
+			userName, userAlias, err := readConfig(filepath.Join(dir, file.Name(), "config.yml"))
+			if err != nil {
+				fmt.Printf("Ошибка чтения файла конфигурации для пользователя %s: %v\n", file.Name(), err)
+				continue
+			}
+			fmt.Printf("User Name: %s, User Alias: %s\n", userName, userAlias)
+		}
+	}
+	os.Exit(0)
 }
 
 // GenerateUserConfig - Generate user config external function
@@ -430,5 +483,7 @@ func GenerateUserConfig(usernameWithAlias string, force bool) {
 
 	generateUserCatalog(username, force)
 	applyNewConfig("users/"+username+"/"+newFilename, tmpl, newUserConfig)
+	fmt.Println("doh:", username+"-"+useralias)
+	fmt.Println("port:", strconv.Itoa(updatedDNSPort))
 	os.Exit(0)
 }
