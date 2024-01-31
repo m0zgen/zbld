@@ -1,7 +1,6 @@
 package counter
 
 import (
-	"fmt"
 	"sync"
 )
 
@@ -37,15 +36,4 @@ func (cm *CounterMap) Del(key string) {
 	cm.Lock()
 	defer cm.Unlock()
 	delete(cm.m, key)
-}
-
-func main() {
-	// Создаем новую CounterMap
-	counterMap := NewCounterMap()
-
-	// Пример использования: инкрементируем счетчик для ключа "example"
-	counterMap.Inc("example")
-
-	// Получаем значение счетчика для ключа "example" и выводим его
-	fmt.Println("Counter for 'example':", counterMap.Get("example"))
 }
