@@ -1,7 +1,10 @@
 .idea
 .DS_Store
 .vscode
+*.prof
+profiles
 dist
+logs
 zdns.log
 tools/builds/prev
 tools

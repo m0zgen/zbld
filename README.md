@@ -81,7 +81,9 @@ reload_interval_duration: 1h
 default_ip_address: "0.0.0.0"
 dns_port: 5001
 enable_logging: true
-log_file: "zdns.log"
+log_store_duration: 1d
+log_dir: "users/logs"
+log_file: "zdns_root"
 inverse: false
 cache_enabled: true
 cache_ttl_seconds: 3600

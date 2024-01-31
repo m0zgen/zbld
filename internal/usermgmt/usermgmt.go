@@ -3,7 +3,6 @@ package users
 import (
 	"bufio"
 	"fmt"
-	"io"
 	"log"
 	"os"
 	"path/filepath"
@@ -13,6 +12,7 @@ import (
 	"strings"
 	"text/template"
 	configuration "zdns/internal/config"
+	"zdns/internal/fs"
 )
 
 // UsrConfig - Struct for new user config
@@ -67,101 +67,34 @@ func askForDeletion() bool {
 	return answer == "Y"
 }
 
-// isDirExists - Check if directory exists
-func isDirExists(path string) bool {
-	_, err := os.Stat(path)
-	if err == nil {
-		return true
-	}
-	if os.IsNotExist(err) {
-		return false
-	}
-	return false
-}
-
-// generateDirs - Create directory if not exists
-func generateDirs(directoryPath string) {
-	// Check if directory exists
-	if _, err := os.Stat(directoryPath); os.IsNotExist(err) {
-		// Catalog does not exist, create it
-		err := os.MkdirAll(directoryPath, 0755)
-		if err != nil {
-			//fmt.Println("Error creating directory:", err)
-			return
-		}
-		fmt.Println("Directory created:", directoryPath)
-	} else if err != nil {
-		// Called another error
-		fmt.Println("Error checking directory:", err)
-		return
-	} else {
-		// Catalog already exists
-		//fmt.Println("Directory already exists:", directoryPath)
-		return
-	}
-}
-
-// copyConfigFiles - Copy config files to user directory
-func copyFile(srcFile, dstFile string) error {
-	src, err := os.Open(srcFile)
-	if err != nil {
-		return err
-	}
-	defer func(src *os.File) {
-		err := src.Close()
-		if err != nil {
-
-		}
-	}(src)
-
-	dst, err := os.Create(dstFile)
-	if err != nil {
-		return err
-	}
-	defer func(dst *os.File) {
-		err := dst.Close()
-		if err != nil {
-
-		}
-	}(dst)
-
-	_, err = io.Copy(dst, src)
-	if err != nil {
-		return err
-	}
-
-	fmt.Printf("File %s copied to %s\n", srcFile, dstFile)
-	return nil
-}
-
 // generateUserCatalog - Create catalogs for user
 func generateUserCatalog(username string, force bool) {
 
 	userSpaceDir := usersDir + "/" + username
 	log.Println("User space directory:", userSpaceDir)
 
-	generateDirs(usersDir)
-	generateDirs(usersLogDir)
-	if isDirExists(userSpaceDir) {
+	fs.GenerateDirs(usersDir)
+	fs.GenerateDirs(usersLogDir)
+	if fs.IsDirExists(userSpaceDir) {
 		log.Printf("User %s already exist. Create another user with different name. Exiting...\n", usersDir+"/"+username)
 		//os.Exit(1)
 		if !force {
 			if askForRecreation() {
-				generateDirs(userSpaceDir)
+				fs.GenerateDirs(userSpaceDir)
 			} else {
 				os.Exit(1)
 			}
 		}
 	} else {
-		generateDirs(userSpaceDir)
+		fs.GenerateDirs(userSpaceDir)
 	}
 
-	err := copyFile(userHostsTemplate, userSpaceDir+"/"+"hosts.txt")
+	err := fs.CopyFile(userHostsTemplate, userSpaceDir+"/"+"hosts.txt")
 	if err != nil {
 		log.Println("Error copying file:", err)
 		return
 	}
-	err = copyFile(userHostsPermTmpl, userSpaceDir+"/"+"hosts-permanent.txt")
+	err = fs.CopyFile(userHostsPermTmpl, userSpaceDir+"/"+"hosts-permanent.txt")
 	if err != nil {
 		log.Println("Error copying file:", err)
 		return
@@ -337,7 +270,7 @@ func structUsrConfig(username, useralias string, dnsPort, metricsPort, updateUse
 		UserAlias:     useralias,
 		DNSPort:       dnsPort,
 		MetricsPort:   metricsPort,
-		LogFile:       fmt.Sprintf("users/logs/user%d.log", updateUserIndex),
+		LogFile:       fmt.Sprintf("user%d_log", updateUserIndex),
 		ConfigVersion: fmt.Sprintf("user%d-config", updateUserIndex),
 		UserComment:   userComment,
 	}
@@ -352,7 +285,7 @@ func DeleteTargetUser(username string, force bool) {
 
 	dirPath := usersDir + "/" + username
 
-	if isDirExists(dirPath) {
+	if fs.IsDirExists(dirPath) {
 
 		if !force {
 			// Ask user for deletion
@@ -381,8 +314,8 @@ func GenerateUserConfig(usernameWithAlias string, force bool) {
 	username := extractAlias(usernameWithAlias, false)
 	useralias := extractAlias(usernameWithAlias, true)
 
-	if !isDirExists(usersDir) {
-		generateDirs(usersLogDir)
+	if !fs.IsDirExists(usersDir) {
+		fs.GenerateDirs(usersLogDir)
 	}
 
 	if useralias == "" {

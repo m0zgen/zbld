@@ -17,14 +17,18 @@ type Config struct {
 	ConsoleMessage       string   `yaml:"console_message"`
 	ConsoleMessageEnable bool     `yaml:"console_message_enable"`
 	DNSPort              int      `yaml:"dns_port"`
+	EnableDNSTcp         bool     `yaml:"enable_dns_tcp"`
 	EnableLogging        bool     `yaml:"enable_logging"`
+	LogDir               string   `yaml:"log_dir"`
 	LogFile              string   `yaml:"log_file"`
+	LogStoreDuration     string   `yaml:"log_store_duration"`
 	BalancingStrategy    string   `yaml:"load_balancing_strategy"`
 	Inverse              bool     `yaml:"inverse"`
 	CacheTTLSeconds      int      `yaml:"cache_ttl_seconds"`
 	CacheEnabled         bool     `yaml:"cache_enabled"`
 	MetricsEnabled       bool     `yaml:"metrics_enabled"`
 	MetricsPort          int      `yaml:"metrics_port"`
+	PromTopNameIncAfter  int      `yaml:"prom_top_name_inc_after"`
 	ConfigVersion        string   `yaml:"config_version"`
 	IsDebug              bool     `yaml:"is_debug"`
 	PermanentEnabled     bool     `yaml:"permanent_enabled"`
