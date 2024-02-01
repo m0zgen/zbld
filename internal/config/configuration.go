@@ -15,7 +15,7 @@ type Config struct {
 	ReloadInterval       string   `yaml:"reload_interval_duration"`
 	DefaultIPAddress     string   `yaml:"default_ip_address"`
 	ConsoleMessage       string   `yaml:"console_message"`
-	ConsoleMessageEnable bool     `yaml:"console_message_enable"`
+	ConsoleMessageEnable bool     `yaml:"console_message_enabled"`
 	DNSPort              int      `yaml:"dns_port"`
 	EnableDNSTcp         bool     `yaml:"enable_dns_tcp"`
 	EnableLogging        bool     `yaml:"enable_logging"`
