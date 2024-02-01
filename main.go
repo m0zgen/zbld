@@ -374,6 +374,7 @@ func main() {
 	// Parse command line arguments
 	addUserFlag := flag.String("adduser", "", "Username for configuration")
 	delUserFlag := flag.String("deluser", "", "Username for deletion")
+	searchUserAliasFlag := flag.String("searchuser", "", "Search user alias")
 	forceFlag := flag.Bool("force", false, "Force operations")
 	clearLogsFlag := flag.Bool("clearlogs", false, "Clear logs")
 	listUsersFlag := flag.Bool("listusers", false, "List existing users")
@@ -435,6 +436,25 @@ func main() {
 	// Update permanent_whitelisted parameter if -permanent argument is passed
 	if permanentFile != "" {
 		config.PermanentWhitelisted = permanentFile
+	}
+
+	// Search user alias if -searchuser argument is passed
+	if *searchUserAliasFlag != "" {
+		users.SetConfig(&config)
+		c, err := users.FindConfigFilesWithAlias(config.UsersDir, *searchUserAliasFlag)
+		if err != nil {
+			log.Fatal("Error searching user alias:", err)
+		}
+		// If alis found - Exit
+		if len(c) > 0 {
+			for _, configFile := range c {
+				fmt.Println(configFile)
+			}
+			os.Exit(0)
+		} else {
+			fmt.Println("Alias not found")
+			os.Exit(1)
+		}
 	}
 
 	// Make init global maps vars

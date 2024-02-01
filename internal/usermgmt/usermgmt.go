@@ -156,8 +156,8 @@ func getNextUserName(basePath, baseName string) (string, error) {
 	return baseName + strconv.Itoa(len(numbers)+1), nil
 }
 
-// findConfigFilesWithAlias - Find config files with alias
-func findConfigFilesWithAlias(rootDir, findUserAlias string) ([]string, error) {
+// FindConfigFilesWithAlias - Find config files with alias
+func FindConfigFilesWithAlias(rootDir, findUserAlias string) ([]string, error) {
 	var configFiles []string
 
 	err := filepath.Walk(rootDir, func(path string, info os.FileInfo, err error) error {
@@ -381,7 +381,7 @@ func GenerateUserConfig(usernameWithAlias string, force bool) {
 		os.Exit(1)
 	} else {
 		// Find user alias in users directory
-		configFiles, err := findConfigFilesWithAlias(usersDir, useralias)
+		configFiles, err := FindConfigFilesWithAlias(usersDir, useralias)
 		if err != nil {
 			fmt.Println("Error:", err)
 			return
