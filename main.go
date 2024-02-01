@@ -291,15 +291,22 @@ func handleDNSRequest(w dns.ResponseWriter, r *dns.Msg) {
 // InitLogging - Init logging to file and stdout
 func initLogging() {
 	if config.EnableLogging {
-		// Create buffered output for console
-		consoleOutput := bufio.NewWriter(os.Stdout)
 
-		// Setup logger to use buffered output for console
-		log.SetOutput(consoleOutput)
+		if config.EnableConsoleLogging {
+			// Create buffered output for console
+			consoleOutput := bufio.NewWriter(os.Stdout)
+			// Setup logger to use buffered output for console
+			log.SetOutput(consoleOutput)
+		}
+
 		log.SetFlags(log.LstdFlags | log.Lshortfile)
 
 	} else {
-		log.SetOutput(os.Stdout)
+		if config.EnableConsoleLogging {
+			log.SetOutput(os.Stdout)
+		} else {
+			log.SetOutput(io.Discard)
+		}
 		log.Println("Logging disabled")
 	}
 
@@ -463,8 +470,11 @@ func main() {
 			}
 		}(logFile)
 
-		// Create multiwriter for logging to file and stdout
-		multiWriter := io.MultiWriter(logFile, os.Stdout)
+		multiWriter := io.Writer(logFile)
+		if config.EnableConsoleLogging {
+			// Create multiwriter for logging to file and stdout
+			multiWriter = io.MultiWriter(logFile, os.Stdout)
+		}
 		// Setups logger to use multiwriter
 		log.SetOutput(multiWriter)
 		log.Printf("Logging: Enabled. Balancing Strategy: %s. Config Version: %s. \n", config.BalancingStrategy, config.ConfigVersion)

@@ -66,6 +66,8 @@ console_message: "- Domain blocked by zDNS. Client IP:"
 # Logging settings
 # Enable/Disable logging to file
 enable_logging: true
+# Show messages in console (false: discard, true: show)
+enable_console_logging: true
 # Duration hours for log files (maxAge)
 log_store_duration: 24h
 log_dir: "users/logs"
