@@ -8,3 +8,6 @@
 # [ Domain rules ] #
 egov.kz
 kaspi.kz
+kcell.kz
+beeline.kz
+tele2.kz
