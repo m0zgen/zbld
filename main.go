@@ -13,7 +13,6 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
-	"regexp"
 	"strings"
 	"sync"
 	"syscall"
@@ -23,6 +22,7 @@ import (
 	"zdns/internal/counter"
 	"zdns/internal/fs"
 	"zdns/internal/lists"
+	"zdns/internal/maps"
 	"zdns/internal/prometheus"
 	"zdns/internal/queries"
 	"zdns/internal/upstreams"
@@ -31,10 +31,10 @@ import (
 
 // Global Variables ----------------------------------------------------------- //
 var config configuration.Config
-var hosts map[string]bool
-var permanentHosts map[string]bool
-var regexMap map[string]*regexp.Regexp
-var permanentRegexMap map[string]*regexp.Regexp
+var hosts *maps.HostsMap
+var permanentHosts *maps.PermanentHostsMap
+var hostsRegexMap *maps.HostsRegexMap
+var permanentRegexMap *maps.PermanentHostsRegexMap
 var counterMap *counter.CounterMap
 var mu sync.Mutex
 
@@ -230,16 +230,20 @@ func handleDNSRequest(w dns.ResponseWriter, r *dns.Msg) {
 		host := question.Name
 		// Delete dot from the end of FQDN
 		_host := strings.TrimRight(host, ".")
-		matching := lists.IsMatching(_host, regexMap)
-		permanentMatching := permanentHosts[_host] || (lists.IsMatching(_host, permanentRegexMap) && config.PermanentEnabled)
+		//matching := lists.IsMatching(_host, hostsRegexMap)
+		reMatch := hostsRegexMap.CheckIsRegexExist(_host)
+		htMatch := hosts.GetIndex(_host)
+		//log.Println("Matching:", matching, "Host:", hh)
+		permanentMatching := permanentHosts.GetIndex(_host) || (permanentRegexMap.CheckIsRegexExist(_host) && config.PermanentEnabled)
 		upstreamDefault := upstreams.GetUpstreamServer(config.UpstreamDNSServers, config.BalancingStrategy)
 
 		// Check cache before requesting upstream DNS server
 		stat, _ := entryInCache(m, host, question)
+
 		if !stat {
 			// Check if host is in hosts.txt
 			// Resolve default hosts using upstream DNS for names not in hosts.txt
-			if (matching && !config.Inverse) || (hosts[_host] && !config.Inverse) {
+			if (reMatch && !config.Inverse) || (htMatch && !config.Inverse) {
 				log.Println("Resolving with default upstream server (local host):", _host, clientIP, upstreamDefault)
 				getQTypeResponse(m, question, host, clientIP, upstreamDefault)
 			} else if permanentMatching {
@@ -248,7 +252,7 @@ func handleDNSRequest(w dns.ResponseWriter, r *dns.Msg) {
 				log.Println("Resolving with permanent upstream server (permanent host):", _host, clientIP, upstreamPermanet)
 				getQTypeResponse(m, question, host, clientIP, upstreamPermanet)
 			} else {
-				if matching || hosts[_host] && !permanentHosts[_host] {
+				if reMatch || htMatch && !permanentHosts.GetIndex(_host) {
 					returnZeroIP(m, clientIP, host)
 				} else if config.Inverse {
 					//if !entryInCache(m, host, question) {
@@ -260,6 +264,9 @@ func handleDNSRequest(w dns.ResponseWriter, r *dns.Msg) {
 					returnZeroIP(m, clientIP, host)
 				}
 			}
+		} else if (reMatch || htMatch) && !permanentHosts.GetIndex(_host) {
+			key := cache.GenerateCacheKey(host, question.Qtype)
+			cache.Del(key)
 		}
 	}
 	prom.IncrementDnsQueriesTotal()
@@ -425,10 +432,10 @@ func main() {
 
 	// Make init global maps vars
 	mu.Lock()
-	hosts = make(map[string]bool)
-	permanentHosts = make(map[string]bool)
-	regexMap = make(map[string]*regexp.Regexp)
-	permanentRegexMap = make(map[string]*regexp.Regexp)
+	hosts = maps.NewHostsMap()
+	permanentHosts = maps.NewPermanentHostsMap()
+	hostsRegexMap = maps.NewHostsRegexMap()
+	permanentRegexMap = maps.NewPermanentHostsRegexMap()
 	cache.GlobalCache.Store = make(map[string]*cache.CacheEntry)
 	counterMap = counter.NewCounterMap()
 	prom.CounterChannel = make(chan string, 1000)
@@ -470,24 +477,16 @@ func main() {
 	queries.SetConfig(&config)
 
 	// Load hosts.txt and bind regex patterns to regexMap in to lists package
-	if config.UseLocalHosts {
-		lists.LoadRegexWithInterval(config.HostsFile, ReloadInterval, regexMap, hosts)
-		lists.LoadRegexWithInterval(config.PermanentWhitelisted, ReloadInterval, permanentRegexMap, permanentHosts)
-	}
-	if config.UseRemoteHosts {
-		// Load hosts and regex with config interval (default 1h)
-		lists.LoadHostsWithInterval(config.HostsFile, ReloadInterval, regexMap, hosts)
-		//lists.LoadHostsWithInterval(config.PermanentWhitelisted, ReloadInterval, regexMap, permanentHosts)
-		lists.LoadPermanentHostsWithInterval(config.PermanentWhitelisted, ReloadInterval, permanentRegexMap, permanentHosts)
-	}
-
-	// Print more messages in to console and log for hosts files debug (after lists.LoadHosts)
-	if config.IsDebug {
-		fmt.Println("Hosts loaded:")
-		for host := range hosts {
-			fmt.Println(host)
-		}
-	}
+	//if config.UseLocalHosts {
+	//	lists.LoadRegexWithInterval(config.HostsFile, ReloadInterval, hostsRegexMap, hosts)
+	//	lists.LoadRegexWithInterval(config.PermanentWhitelisted, ReloadInterval, permanentRegexMap, permanentHosts)
+	//}
+	//if config.UseRemoteHosts {
+	// Load hosts and regex with config interval (default 1h)
+	lists.LoadHostsWithInterval(config.HostsFile, ReloadInterval, hostsRegexMap, hosts)
+	//lists.LoadHostsWithInterval(config.PermanentWhitelisted, ReloadInterval, regexMap, permanentHosts)
+	lists.LoadPermanentHostsWithInterval(config.PermanentWhitelisted, ReloadInterval, permanentRegexMap, permanentHosts)
+	//}
 
 	// Run CounterChanne goroutine
 	// Define goroutine pool size.

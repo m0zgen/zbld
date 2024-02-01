@@ -11,6 +11,7 @@ import (
 	"sync"
 	"time"
 	configuration "zdns/internal/config"
+	"zdns/internal/maps"
 	prom "zdns/internal/prometheus"
 )
 
@@ -51,59 +52,39 @@ func IsMatching(host string, regexMap map[string]*regexp.Regexp) bool {
 // Load operations ------------------------------------------------------- //
 
 // loadHosts - Load hosts from file and bind maps
-func loadHosts(filename string, useRemote bool, urls []string, regexMap map[string]*regexp.Regexp, targetMap map[string]bool) error {
+func loadHosts(filename string, urls []string, regexMap interface{}, targetMap interface{}, isPermanent bool) error {
+
+	var errs []error
 	//TODO: Add counting lines for downloaded files and set limit for it (100 lines for example)
 	var downloadedFile = strings.TrimRight(filename, ".txt") + "_downloaded.txt"
 
+	// Load local host files
 	if useLocalHosts {
-		//log.Printf("Loading local hosts from %s\n", filename)
-		// load local files
-		//for _, filename := range filenames {
-		file, err := os.Open(filename)
-		if err != nil {
-			return err
+		if err := loadHostsAndRegex(filename, regexMap, targetMap, isPermanent); err != nil {
+			log.Printf("Error loading hosts and regex file: %v", err)
+			return nil
 		}
-		defer func(file *os.File) {
-			err := file.Close()
-			if err != nil {
-				log.Println("Error closing file:", err)
-				return // ignore error
-			}
-		}(file)
-
-		//mu.Lock()
-		//defer mu.Unlock()
-		scanner := bufio.NewScanner(file)
-		for scanner.Scan() {
-			host := strings.ToLower(scanner.Text())
-			if len(host) > 0 || !strings.Contains(host, "#") {
-				targetMap[host] = true
-			}
-		}
-
-		if err := scanner.Err(); err != nil {
-			return err
-		}
-		//}
 	}
 
 	// Download remote host files
-	//if useRemote && !strings.Contains(filename, "permanent") {
-	if useRemote {
+	if useRemoteHosts {
 
 		// Check if file exists
 		if _, err := os.Stat(downloadedFile); err == nil {
 			// If file exists, clear its contents
-			if err := os.WriteFile(downloadedFile, []byte{}, 0644); err != nil {
+			if err = os.WriteFile(downloadedFile, []byte{}, 0644); err != nil {
 				return err
 			}
 		}
 
 		for _, url := range urls {
-			log.Println("Loading remote file:", url)
+			log.Println("Download remote file:", url)
 			response, err := http.Get(url)
 			if err != nil {
-				return err
+				// Add error to errs slice
+				errs = append(errs, err)
+				// Continue to next iteration
+				continue
 			}
 			defer func(Body io.ReadCloser) {
 				err := Body.Close()
@@ -134,22 +115,30 @@ func loadHosts(filename string, useRemote bool, urls []string, regexMap map[stri
 			//
 
 			//mu.Lock()
-			scanner := bufio.NewScanner(response.Body)
-			for scanner.Scan() {
-				host := strings.ToLower(scanner.Text())
-				if len(host) > 0 || !strings.Contains(host, "#") {
-					targetMap[host] = true
-				}
-			}
+			//scanner := bufio.NewScanner(response.Body)
+			//for scanner.Scan() {
+			//	host := strings.ToLower(scanner.Text())
+			//	if len(host) > 0 || !strings.Contains(host, "#") {
+			//		targetMap[host] = true
+			//	}
+			//}
 			//mu.Unlock()
 
-			if err := scanner.Err(); err != nil {
-				return err
-			}
+			//if err := scanner.Err(); err != nil {
+			//	return err
+			//}
 		}
 
-		if err := loadHostsAndRegex(downloadedFile, regexMap, targetMap); err != nil {
-			log.Fatalf("Error loading hosts and regex file: %v", err)
+		if err := loadHostsAndRegex(downloadedFile, regexMap, targetMap, isPermanent); err != nil {
+			log.Printf("Error loading hosts and regex file: %v", err)
+			return nil
+		}
+	}
+
+	// If there are any errors, print them
+	if len(errs) > 0 {
+		for _, err := range errs {
+			log.Printf("Error downloading file: %v", err)
 		}
 	}
 
@@ -158,7 +147,7 @@ func loadHosts(filename string, useRemote bool, urls []string, regexMap map[stri
 }
 
 // LoadHostsAndRegex - Load hosts and regex patterns from file
-func loadHostsAndRegex(filename string, regexMap map[string]*regexp.Regexp, targetMap map[string]bool) error {
+func loadHostsAndRegex(filename string, regexMap interface{}, targetMap interface{}, isPermanent bool) error {
 	file, err := os.Open(filename)
 	if err != nil {
 		return err
@@ -171,9 +160,7 @@ func loadHostsAndRegex(filename string, regexMap map[string]*regexp.Regexp, targ
 		}
 	}(file)
 
-	//mu.Lock()
-	//defer mu.Unlock()
-	//hosts = make(map[string]bool)
+	log.Println("Loading local file:", filename)
 	scanner := bufio.NewScanner(file)
 	for scanner.Scan() {
 		entry := scanner.Text()
@@ -189,13 +176,26 @@ func loadHostsAndRegex(filename string, regexMap map[string]*regexp.Regexp, targ
 				return err
 			}
 			if len(entry) > 0 || !strings.Contains(entry, "#") {
-				regexMap[regexPattern] = regex
+				if !isPermanent {
+					target := regexMap.(*maps.HostsRegexMap)
+					target.Set(regexPattern, regex)
+				} else {
+					target := regexMap.(*maps.PermanentHostsRegexMap)
+					target.Set(regexPattern, regex)
+				}
+				//regexMap[regexPattern] = regex
 			}
 		} else {
 			// Regular host entry
 			if len(entry) > 0 || !strings.Contains(entry, "#") {
 				host := strings.ToLower(entry)
-				targetMap[host] = true
+				if !isPermanent {
+					target := targetMap.(*maps.HostsMap)
+					target.Set(host, true)
+				} else {
+					target := targetMap.(*maps.PermanentHostsMap)
+					target.Set(host, true)
+				}
 			}
 		}
 	}
@@ -203,6 +203,8 @@ func loadHostsAndRegex(filename string, regexMap map[string]*regexp.Regexp, targ
 
 	if err := scanner.Err(); err != nil {
 		return err
+	} else {
+		log.Println("File successfully loaded:", filename)
 	}
 
 	return nil
@@ -211,54 +213,54 @@ func loadHostsAndRegex(filename string, regexMap map[string]*regexp.Regexp, targ
 // Interval Callers  ----------------------------------------------------- //
 
 // LoadHostsWithInterval - LoadHosts with interval
-func LoadHostsWithInterval(filename string, interval time.Duration, regexMap map[string]*regexp.Regexp, targetMap map[string]bool) {
+func LoadHostsWithInterval(filename string, interval time.Duration, regexMap *maps.HostsRegexMap, targetMap *maps.HostsMap) {
 
 	// Goroutine for periodic lists reload
 	go func() {
 		for {
-			mu.Lock()
+			//mu.Lock()
 			//log.Println("Reloading hosts or URL file:", hostsFileURL)
-			if err := loadHosts(filename, useRemoteHosts, hostsFileURL, regexMap, targetMap); err != nil {
+			if err := loadHosts(filename, hostsFileURL, regexMap, targetMap, false); err != nil {
 				log.Println("Error loading hosts file:", hostsFileURL, err)
 				return
 			}
 			//prom.ReloadHostsTotal.Inc()
 			prom.IncrementReloadHostsTotal()
-			mu.Unlock()
+			//mu.Unlock()
 			time.Sleep(interval)
 		}
 	}()
 }
 
 // LoadPermanentHostsWithInterval - LoadHosts with interval
-func LoadPermanentHostsWithInterval(filename string, interval time.Duration, regexMap map[string]*regexp.Regexp, targetMap map[string]bool) {
+func LoadPermanentHostsWithInterval(filename string, interval time.Duration, regexMap *maps.PermanentHostsRegexMap, targetMap *maps.PermanentHostsMap) {
 
 	// Goroutine for periodic lists reload
 	go func() {
 		for {
-			mu.Lock()
+			//mu.Lock()
 			//log.Println("Reloading permanent URL file:", permanentFileURL)
-			if err := loadHosts(filename, useRemoteHosts, permanentFileURL, regexMap, targetMap); err != nil {
+			if err := loadHosts(filename, permanentFileURL, regexMap, targetMap, true); err != nil {
 				log.Println("Error loading permanent hosts file:", err)
 				return
 			}
 			//prom.ReloadHostsTotal.Inc()
 			prom.IncrementReloadHostsTotal()
-			mu.Unlock()
+			//mu.Unlock()
 			time.Sleep(interval)
 		}
 	}()
 }
 
 // LoadRegexWithInterval - LoadHostsAndRegex with interval
-func LoadRegexWithInterval(filename string, interval time.Duration, regexMap map[string]*regexp.Regexp, targetMap map[string]bool) {
+func LoadRegexWithInterval(filename string, interval time.Duration, regexMap map[string]*regexp.Regexp, targetMap map[string]bool, isPermanent bool) {
 
 	// Goroutine for periodic lists reload
 	go func() {
 		for {
 			mu.Lock()
 			log.Println("Loading local file:", filename)
-			if err := loadHostsAndRegex(filename, regexMap, targetMap); err != nil {
+			if err := loadHostsAndRegex(filename, regexMap, targetMap, isPermanent); err != nil {
 				log.Fatalf("Error loading hosts and regex file: %v", err)
 			}
 			//prom.ReloadHostsTotal.Inc()
