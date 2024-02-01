@@ -162,6 +162,7 @@ func loadHostsAndRegex(filename string, regexMap interface{}, targetMap interfac
 
 	log.Println("Loading local file:", filename)
 	scanner := bufio.NewScanner(file)
+	lineCount := 0 // Lines counter
 	for scanner.Scan() {
 		entry := scanner.Text()
 
@@ -198,13 +199,14 @@ func loadHostsAndRegex(filename string, regexMap interface{}, targetMap interfac
 				}
 			}
 		}
+		lineCount++
 	}
 	//mu.Unlock()
 
 	if err := scanner.Err(); err != nil {
 		return err
 	} else {
-		log.Println("File successfully loaded:", filename)
+		log.Printf("File successfully loaded (total lines: %d) file name: %s\n", lineCount, filename)
 	}
 
 	return nil
