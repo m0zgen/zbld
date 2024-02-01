@@ -103,4 +103,4 @@ inverse: true
 is_debug: false
 
 # Config version
-config_version: "Root-0.2.7"
+config_version: "Root-0.2.8"
