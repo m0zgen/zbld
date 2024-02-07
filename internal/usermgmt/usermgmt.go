@@ -12,8 +12,8 @@ import (
 	"strconv"
 	"strings"
 	"text/template"
-	configuration "zdns/internal/config"
-	"zdns/internal/fs"
+	configuration "zbld/internal/config"
+	"zbld/internal/fs"
 )
 
 // UsrConfig - Template struct for new user config

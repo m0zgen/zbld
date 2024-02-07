@@ -1,5 +1,5 @@
 # Documentation at https://goreleaser.com
-project_name: zdns
+project_name: zbld
 
 before:
   hooks:

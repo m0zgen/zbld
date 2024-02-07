@@ -10,9 +10,9 @@ import (
 	"strings"
 	"sync"
 	"time"
-	configuration "zdns/internal/config"
-	"zdns/internal/maps"
-	prom "zdns/internal/prometheus"
+	configuration "zbld/internal/config"
+	"zbld/internal/maps"
+	prom "zbld/internal/prometheus"
 )
 
 var mu sync.RWMutex

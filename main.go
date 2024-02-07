@@ -17,16 +17,16 @@ import (
 	"sync"
 	"syscall"
 	"time"
-	"zdns/internal/cache"
-	"zdns/internal/config"
-	"zdns/internal/counter"
-	"zdns/internal/fs"
-	"zdns/internal/lists"
-	"zdns/internal/maps"
-	"zdns/internal/prometheus"
-	"zdns/internal/queries"
-	"zdns/internal/upstreams"
-	"zdns/internal/usermgmt"
+	"zbld/internal/cache"
+	"zbld/internal/config"
+	"zbld/internal/counter"
+	"zbld/internal/fs"
+	"zbld/internal/lists"
+	"zbld/internal/maps"
+	"zbld/internal/prometheus"
+	"zbld/internal/queries"
+	"zbld/internal/upstreams"
+	"zbld/internal/usermgmt"
 )
 
 // Global Variables ----------------------------------------------------------- //
@@ -477,7 +477,7 @@ func main() {
 			fs.GenerateDirs(config.LogDir)
 		}
 		logPath := config.LogDir + "/" + config.LogFile
-		// logFile, err := os.Create(config.LogFile) // Recreate it every zdns restart
+		// logFile, err := os.Create(config.LogFile) // Recreate it every zbld restart
 		logFile, err := os.OpenFile(logPath+"_"+time.Now().Format("2006-01-02")+".log", os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0666)
 		if err != nil {
 			log.Fatal("Log file creation error:", err)

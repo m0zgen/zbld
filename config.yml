@@ -38,11 +38,11 @@ allowed_qtypes:
 hosts_file: "hosts.txt"
 # Plain text and /regex/ hosts file supported
 hosts_file_url:
-  - "https://raw.githubusercontent.com/m0zgen/my-zdns/master/block.txt"
+  - "https://raw.githubusercontent.com/m0zgen/my-zbld/master/block.txt"
 # Permanent - everything allowed
 permanent_whitelisted: "hosts-permanent.txt"
 permanent_file_url:
-  - "https://raw.githubusercontent.com/m0zgen/my-zdns/master/allow.txt"
+  - "https://raw.githubusercontent.com/m0zgen/my-zbld/master/allow.txt"
 permanent_enabled: true
 # Remote and local host files reload interval
 reload_interval_duration: 1h
@@ -72,7 +72,7 @@ enable_console_logging: true
 log_store_duration: 24h
 log_dir: "users/logs"
 # Log file prefix
-log_file: "zdns_root"
+log_file: "zbld_root"
 
 # Cache settings
 # If enable_cache is set to true, then the results of DNS queries will be cached

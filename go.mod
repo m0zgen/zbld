@@ -1,4 +1,4 @@
-module zdns
+module zbld
 
 go 1.21
 

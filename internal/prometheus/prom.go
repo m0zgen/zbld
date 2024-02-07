@@ -12,14 +12,14 @@ var (
 	// DnsQueriesTotal Initialized Prometheus metrics for DNS queries
 	DnsQueriesTotal = prometheus.NewCounter(
 		prometheus.CounterOpts{
-			Name: "zdns_dns_queries_total",
+			Name: "zbld_dns_queries_total",
 			Help: "Total number of DNS queries.",
 		},
 	)
 	// RequestsQTypeTotal Initialized Prometheus metrics for QTypes
 	RequestsQTypeTotal = prometheus.NewCounterVec(
 		prometheus.CounterOpts{
-			Name: "zdns_requests_qtype_total",
+			Name: "zbld_requests_qtype_total",
 			Help: "Total number of DNS requests by type",
 		},
 		[]string{"type"},
@@ -27,7 +27,7 @@ var (
 	// RequestedDomainNameCounter Initialized Prometheus metrics for first request of domain
 	RequestedDomainNameCounter = prometheus.NewCounterVec(
 		prometheus.CounterOpts{
-			Name: "zdns_domain_name_requests_total",
+			Name: "zbld_domain_name_requests_total",
 			Help: "Total number of DNS requests by domain",
 		},
 		[]string{"domain"},
@@ -35,7 +35,7 @@ var (
 	// BlockedDomainNameCounter Initialized Prometheus metrics for blocked domains (zero responses)
 	BlockedDomainNameCounter = prometheus.NewCounterVec(
 		prometheus.CounterOpts{
-			Name: "zdns_domain_name_blocked_total",
+			Name: "zbld_domain_name_blocked_total",
 			Help: "Total number of blocked DNS requests by domain",
 		},
 		[]string{"domain"},
@@ -43,7 +43,7 @@ var (
 	// NXDomainNameCounter Initialized Prometheus metrics for NXDOMAINs
 	NXDomainNameCounter = prometheus.NewCounterVec(
 		prometheus.CounterOpts{
-			Name: "zdns_domain_name_nxdomain_total",
+			Name: "zbld_domain_name_nxdomain_total",
 			Help: "Total number of NXDOMAIN answers by domain",
 		},
 		[]string{"domain"},
@@ -51,28 +51,28 @@ var (
 	// SuccessfulResolutionsTotal Initialized Prometheus metrics
 	SuccessfulResolutionsTotal = prometheus.NewCounter(
 		prometheus.CounterOpts{
-			Name: "zdns_successful_resolutions_total",
+			Name: "zbld_successful_resolutions_total",
 			Help: "Total number of successful DNS resolutions.",
 		},
 	)
 	// CacheHitResponseTotal Initialized Prometheus metrics
 	CacheHitResponseTotal = prometheus.NewCounter(
 		prometheus.CounterOpts{
-			Name: "zdns_cache_hit_response_total_count",
+			Name: "zbld_cache_hit_response_total_count",
 			Help: "Total number of responses from cache count.",
 		},
 	)
 	// ZeroResolutionsTotal Initialized Prometheus metrics
 	ZeroResolutionsTotal = prometheus.NewCounter(
 		prometheus.CounterOpts{
-			Name: "zdns_zero_resolutions_total",
+			Name: "zbld_zero_resolutions_total",
 			Help: "Total number of zeroed DNS resolutions.",
 		},
 	)
 	// ReloadHostsTotal Initialized Prometheus metrics
 	ReloadHostsTotal = prometheus.NewCounter(
 		prometheus.CounterOpts{
-			Name: "zdns_reload_hosts_total_count",
+			Name: "zbld_reload_hosts_total_count",
 			Help: "Total number of hosts reloads count.",
 		},
 	)

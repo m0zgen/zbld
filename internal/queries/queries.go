@@ -6,9 +6,9 @@ import (
 	"log"
 	"net"
 	"time"
-	"zdns/internal/cache"
-	configuration "zdns/internal/config"
-	prom "zdns/internal/prometheus"
+	"zbld/internal/cache"
+	configuration "zbld/internal/config"
+	prom "zbld/internal/prometheus"
 )
 
 var configCacheTTLSeconds int
