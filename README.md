@@ -1,6 +1,6 @@
 # zBLD
 
-Zero-Trust DNS Background Listener Daemon.
+Zero-Trust Background Listener DNS Daemon.
 
 ![zBLD as BlackHole Server](./docs/zbld_logo.png)
 
