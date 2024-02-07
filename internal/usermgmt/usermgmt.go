@@ -239,11 +239,17 @@ func isDigit(c byte) bool {
 
 // updateNum - Update passed number (like as port) to user postfix number
 func updateNum(basePort, number int) int {
-	// Change last digits in basePort etc. params in config to extracted number
-	portStr := strconv.Itoa(basePort)
-	updatedPortStr := portStr[:len(portStr)-len(strconv.Itoa(number))] + strconv.Itoa(number)
-	updatedPort, _ := strconv.Atoi(updatedPortStr)
-	return updatedPort
+	if number <= 9999 {
+		// Change last digits in basePort etc. params in config to extracted number
+		portStr := strconv.Itoa(basePort)
+		updatedPortStr := portStr[:len(portStr)-len(strconv.Itoa(number))] + strconv.Itoa(number)
+		updatedPort, _ := strconv.Atoi(updatedPortStr)
+		return updatedPort
+	} else {
+		log.Println("Number is too big. End of reach users. Exiting...")
+		os.Exit(1)
+		return 0
+	}
 }
 
 // extractNumber - Extract number from username
@@ -449,7 +455,7 @@ func GenerateUserConfig(usernameWithAlias string, force bool) {
 	// Update default ports and user index
 	updatedDNSPort := updateNum(50000, number)
 	updateMetricsPort := updateNum(40000, number)
-	updateUserIndex := updateNum(0000, number)
+	updateUserIndex := updateNum(10000, number)
 
 	// Apply new config for new user with updated data
 	//newUserConfig := UsrConfig{
