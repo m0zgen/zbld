@@ -242,6 +242,9 @@ func updateNum(basePort, number int) int {
 	if number <= 9999 {
 		// Change last digits in basePort etc. params in config to extracted number
 		portStr := strconv.Itoa(basePort)
+		if portStr == "0" {
+			return number
+		}
 		updatedPortStr := portStr[:len(portStr)-len(strconv.Itoa(number))] + strconv.Itoa(number)
 		updatedPort, _ := strconv.Atoi(updatedPortStr)
 		return updatedPort
@@ -455,7 +458,7 @@ func GenerateUserConfig(usernameWithAlias string, force bool) {
 	// Update default ports and user index
 	updatedDNSPort := updateNum(50000, number)
 	updateMetricsPort := updateNum(40000, number)
-	updateUserIndex := updateNum(10000, number)
+	updateUserIndex := updateNum(0, number)
 
 	// Apply new config for new user with updated data
 	//newUserConfig := UsrConfig{

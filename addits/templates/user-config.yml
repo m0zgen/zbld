@@ -22,7 +22,7 @@ reload_interval_duration: 1h
 default_ip_address: "0.0.0.0"
 enable_dns_tcp: true
 console_message_enabled: true
-console_message: "- Blocked by zDNS"
+console_message: "- Blocked by zBLD"
 enable_logging: true
 enable_console_logging: true
 log_store_duration: 24h
