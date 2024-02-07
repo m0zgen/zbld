@@ -176,7 +176,7 @@ func loadHostsAndRegex(filename string, regexMap interface{}, targetMap interfac
 			if err != nil {
 				return err
 			}
-			if len(entry) > 0 || !strings.Contains(entry, "#") {
+			if len(entry) > 0 && !strings.Contains(entry, "#") {
 				if !isPermanent {
 					target := regexMap.(*maps.HostsRegexMap)
 					target.Set(regexPattern, regex)
@@ -185,10 +185,12 @@ func loadHostsAndRegex(filename string, regexMap interface{}, targetMap interfac
 					target.Set(regexPattern, regex)
 				}
 				//regexMap[regexPattern] = regex
+				lineCount++
+
 			}
 		} else {
 			// Regular host entry
-			if len(entry) > 0 || !strings.Contains(entry, "#") {
+			if len(entry) > 0 && !strings.Contains(entry, "#") {
 				host := strings.ToLower(entry)
 				if !isPermanent {
 					target := targetMap.(*maps.HostsMap)
@@ -197,9 +199,10 @@ func loadHostsAndRegex(filename string, regexMap interface{}, targetMap interfac
 					target := targetMap.(*maps.PermanentHostsMap)
 					target.Set(host, true)
 				}
+				lineCount++
+
 			}
 		}
-		lineCount++
 	}
 	//mu.Unlock()
 
