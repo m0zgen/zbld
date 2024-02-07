@@ -9,10 +9,12 @@ zdns.log
 tools/builds/prev
 tools
 tmp/*
-zdns
 !internal/users/*
 # Tests
 users
 new_*
 *download*
 test.conf
+# Binaries
+zdns
+zbld
