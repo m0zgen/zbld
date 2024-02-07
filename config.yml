@@ -61,7 +61,7 @@ enable_dns_tcp: true
 default_ip_address: "0.0.0.0"
 # Console TXT message for blocked domain (for nslookup etc.)
 console_message_enabled: true
-console_message: "- Domain blocked by zDNS. Client IP:"
+console_message: "- Domain blocked by zBLD. Client IP:"
 
 # Logging settings
 # Enable/Disable logging to file
