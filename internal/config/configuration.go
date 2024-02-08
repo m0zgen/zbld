@@ -42,6 +42,7 @@ type Config struct {
 	UsersDir             string   `yaml:"users_dir"`
 	UsersLogDir          string   `yaml:"users_log_dir"`
 	AllowedQtypes        []string `yaml:"allowed_qtypes"`
+	TruncateMessages     bool     `yaml:"truncate_messages"`
 }
 
 // LoadConfig - Load configuration from file

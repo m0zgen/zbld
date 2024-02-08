@@ -3,6 +3,7 @@ package main
 import (
 	"bufio"
 	"encoding/json"
+	"errors"
 	"flag"
 	"fmt"
 	"github.com/miekg/dns"
@@ -22,6 +23,7 @@ import (
 	"zbld/internal/config"
 	"zbld/internal/counter"
 	"zbld/internal/fs"
+	"zbld/internal/global"
 	"zbld/internal/lists"
 	"zbld/internal/maps"
 	"zbld/internal/prometheus"
@@ -175,10 +177,20 @@ func isAllowedQtype(qtype uint16, allowedQtypes []string) bool {
 
 // Determine function that takes a pointer to dns.Msg
 func sendResponse(w dns.ResponseWriter, response *dns.Msg) {
+
+	if response.Truncated {
+		response.Compress = true
+		_, err := response.Pack()
+		if err != nil {
+			return
+		}
+	}
+
 	err := w.WriteMsg(response)
 	// If error is occurred, check if it is a connection close error
 	if err != nil {
-		if netErr, ok := err.(net.Error); ok && netErr.Timeout() {
+		var netErr net.Error
+		if errors.As(err, &netErr) && netErr.Timeout() {
 			// Error is related to connection close
 			log.Println("Connection is closed. Skipping response.")
 			return
@@ -289,46 +301,22 @@ func handleDNSRequest(w dns.ResponseWriter, r *dns.Msg) {
 			cache.Del(key)
 		}
 	}
-	prom.IncrementDnsQueriesTotal()
 
-	if !clientTCP {
-		// Check if response size is more than 512 bytes
-		if calculateDNSResponseSize(m) > 512 {
-			// Stay only answers that fit in 512 bytes
-			var newAnswer []dns.RR
-			var totalSize int
-			for _, rr := range m.Answer {
-				if rr == nil {
-					continue
-				}
-				raw := rr.String()
-				if totalSize+len(raw) > 512 {
-					break
-				}
-				totalSize += len(raw)
-				newAnswer = append(newAnswer, rr)
-			}
-			log.Println("Response is too big. Truncating response.")
-			m.Answer = newAnswer
-			m.Truncated = true
+	if config.TruncateMessages {
+		if config.IsDebug {
+			log.Println("Global TCP flag:", global.IsFromTCP)
 		}
+		if !clientTCP || !global.IsFromTCP {
+			// Check if response size is more than 512 bytes
+			if calculateDNSResponseSize(m) > 512 {
+				m.Truncated = true
+			}
+		}
+		global.IsFromTCP = false
 	}
 
 	sendResponse(w, m)
-
-	//// Send response to client and try to write response
-	//err := w.WriteMsg(m)
-	//// If error is occurred, check if it is a connection close error
-	//if err != nil {
-	//	if netErr, ok := err.(net.Error); ok && netErr.Timeout() {
-	//		// Error is related to connection close
-	//		log.Println("Connection is closed. Skipping response.")
-	//		return
-	//	}
-	//	// Other errors
-	//	log.Printf("Error writing DNS response: %v", err)
-	//	return
-	//}
+	prom.IncrementDnsQueriesTotal()
 
 }
 
@@ -389,14 +377,14 @@ func SigtermHandler(signal os.Signal) {
 
 // calculateDNSResponseSize - Calculate DNS response size
 func calculateDNSResponseSize(response *dns.Msg) int {
-	// Сериализация ответа в байты
+	// Serialize response to bytes
 	bytes, err := json.Marshal(response.Answer)
 	if err != nil {
-		// Обработка ошибки при сериализации
+		// If error occurred during serialization
 		log.Printf("Error marshalling DNS response: %v\n", err)
 		return 0
 	}
-	// Возвращаем размер сериализованного ответа
+	// Return size of serialized response in bytes
 	return len(bytes)
 }
 
@@ -504,7 +492,7 @@ func main() {
 		if err != nil {
 			log.Fatal("Error searching user alias:", err)
 		}
-		// If alis found - Exit
+		// If alias found - Exit
 		if len(c) > 0 {
 			for _, configFile := range c {
 				fmt.Println(configFile)
@@ -565,19 +553,10 @@ func main() {
 	lists.SetConfig(&config)
 	queries.SetConfig(&config)
 
-	// Load hosts.txt and bind regex patterns to regexMap in to lists package
-	//if config.UseLocalHosts {
-	//	lists.LoadRegexWithInterval(config.HostsFile, ReloadInterval, hostsRegexMap, hosts)
-	//	lists.LoadRegexWithInterval(config.PermanentWhitelisted, ReloadInterval, permanentRegexMap, permanentHosts)
-	//}
-	//if config.UseRemoteHosts {
-	// Load hosts and regex with config interval (default 1h)
 	lists.LoadHostsWithInterval(config.HostsFile, ReloadInterval, hostsRegexMap, hosts)
-	//lists.LoadHostsWithInterval(config.PermanentWhitelisted, ReloadInterval, regexMap, permanentHosts)
 	lists.LoadPermanentHostsWithInterval(config.PermanentWhitelisted, ReloadInterval, permanentRegexMap, permanentHosts)
-	//}
 
-	// Run CounterChanne goroutine
+	// Run CounterChannel goroutine
 	// Define goroutine pool size.
 	poolSize := 10
 	wg.Add(poolSize)
@@ -641,9 +620,8 @@ func main() {
 
 	// Run log files cleanup
 	if config.EnableLogging {
-		wg.Add(1) // Увеличиваем счетчик ожидаемых горутин до 2
-
-		// Горутина для создания нового файла логов ежедневно
+		wg.Add(1)
+		// Go routine for creating new log file daily
 		go func() {
 			defer wg.Done()
 			fs.CreateNewLogFileDaily(config.LogDir + "/" + config.LogFile)
@@ -667,7 +645,7 @@ func main() {
 
 	// End of program ----------------------------------------------------------- //
 
-	// Close CounterChanne
+	// Close CounterChannel
 	close(prom.CounterChannel)
 	// Waiting for all goroutines to complete and ensure exit
 	wg.Wait()

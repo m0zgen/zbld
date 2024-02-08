@@ -43,4 +43,6 @@ user_alias: "{{.UserAlias}}"
 user_comment: "{{.UserComment}}"
 # Modes
 inverse: true
+# Extra settings
 is_debug: false
+truncate_messages: false

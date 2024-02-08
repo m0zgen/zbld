@@ -8,10 +8,12 @@ import (
 	"time"
 	"zbld/internal/cache"
 	configuration "zbld/internal/config"
+	"zbld/internal/global"
 	prom "zbld/internal/prometheus"
 )
 
 var configCacheTTLSeconds int
+var configTruncateMessages bool
 
 // Config setter -------------------------------------------------------- //
 
@@ -20,6 +22,7 @@ var configCacheTTLSeconds int
 func SetConfig(cfg *configuration.Config) {
 	// Set local variables through cgf.Config
 	configCacheTTLSeconds = cfg.CacheTTLSeconds
+	configTruncateMessages = cfg.TruncateMessages
 	// ...
 }
 
@@ -183,16 +186,20 @@ func GetQTypeAnswer(hostName string, question dns.Question, upstreamAddr string,
 	m.SetQuestion(dns.Fqdn(hostName), question.Qtype)
 	client := dns.Client{}
 	if clientTCP {
-		client = dns.Client{Net: "tcp"}
+		client.Net = "tcp"
 	}
 	resp, _, err := client.Exchange(m, upstreamAddr)
 	if err != nil {
-		log.Println("Error get QType answer from client exchange (try on TCP):", err)
+		log.Println("Error getting QType answer from client exchange (trying on TCP):", err)
 		//return nil, err
 	}
 
-	if resp.Truncated {
-		client = dns.Client{Net: "tcp"}
+	if resp != nil && resp.Truncated {
+		client.Net = "tcp"
+		if configTruncateMessages {
+			global.IsFromTCP = true
+		}
+		log.Println("Truncated response, trying on TCP")
 		resp, _, err = client.Exchange(m, upstreamAddr)
 		if err != nil {
 			log.Println("Error get QType answer from client in TCP:", err)

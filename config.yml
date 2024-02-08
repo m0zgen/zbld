@@ -99,8 +99,10 @@ users_log_dir: "users/logs"
 # If inverse is set to true, then the hosts files from hosts_file, hosts_file_url will be treated as a blacklist
 # instead of a whitelist (if false). In short, if true, then the hosts file will be marked as blacklisted
 inverse: true
-# Extra messaging
+# Extra options
 is_debug: false
+# Truncate DNS messages if over 512 bytes (for main servers - true)
+truncate_messages: false
 
 # Config version
 config_version: "Root-0.2.8"
