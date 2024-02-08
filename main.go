@@ -2,6 +2,7 @@ package main
 
 import (
 	"bufio"
+	"encoding/json"
 	"flag"
 	"fmt"
 	"github.com/miekg/dns"
@@ -270,6 +271,28 @@ func handleDNSRequest(w dns.ResponseWriter, r *dns.Msg) {
 		}
 	}
 	prom.IncrementDnsQueriesTotal()
+
+	// Check if response size is more than 512 bytes
+	if calculateDNSResponseSize(m) > 512 {
+		// Stay only answers that fit in 512 bytes
+		var newAnswer []dns.RR
+		var totalSize int
+		for _, rr := range m.Answer {
+			if rr == nil {
+				continue
+			}
+			raw := rr.String()
+			if totalSize+len(raw) > 512 {
+				break
+			}
+			totalSize += len(raw)
+			newAnswer = append(newAnswer, rr)
+		}
+		log.Println("Response is too big. Truncating response.")
+		m.Answer = newAnswer
+		m.Truncated = true
+	}
+
 	// Send response to client and try to write response
 	err := w.WriteMsg(m)
 	// If error is occurred, check if it is a connection close error
@@ -340,6 +363,19 @@ func SigtermHandler(signal os.Signal) {
 }
 
 // TEST FUNCTIONS ------------------------------------------------------------- //
+
+// calculateDNSResponseSize - Calculate DNS response size
+func calculateDNSResponseSize(response *dns.Msg) int {
+	// Сериализация ответа в байты
+	bytes, err := json.Marshal(response)
+	if err != nil {
+		// Обработка ошибки при сериализации
+		log.Printf("Error marshalling DNS response: %v\n", err)
+		return 0
+	}
+	// Возвращаем размер сериализованного ответа
+	return len(bytes)
+}
 
 // Space - Test function
 // incrementCounter - Test function for messages counting

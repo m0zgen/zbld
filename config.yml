@@ -85,7 +85,7 @@ metrics_enabled: true
 metrics_port: 40000
 # Extra metrics settings
 # Prometheus top name increment after N requests for unique domains
-prom_top_name_inc_after: 10
+prom_top_name_inc_after: 100
 
 # Users management
 user_hosts_template: "addits/templates/user-hosts.txt"

@@ -32,7 +32,7 @@ cache_enabled: true
 cache_ttl_seconds: 3600
 metrics_enabled: true
 # Prometheus top name increment after N requests for unique domains
-prom_top_name_inc_after: 10
+prom_top_name_inc_after: 100
 # Individual parameters for each user
 dns_port: {{.DNSPort}}
 metrics_port: {{.MetricsPort}}
