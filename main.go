@@ -178,12 +178,13 @@ func isAllowedQtype(qtype uint16, allowedQtypes []string) bool {
 // Determine function that takes a pointer to dns.Msg
 func sendResponse(w dns.ResponseWriter, response *dns.Msg) {
 
-	if response.Truncated {
+	if global.IsFromTCP {
 		response.Compress = true
 		_, err := response.Pack()
 		if err != nil {
 			return
 		}
+		global.IsFromTCP = false
 	}
 
 	err := w.WriteMsg(response)
@@ -241,6 +242,8 @@ func handleDNSRequest(w dns.ResponseWriter, r *dns.Msg) {
 	m := new(dns.Msg)
 	m.SetReply(r)
 	m.Authoritative = true // Set authoritative flag to compress response or not
+	// Set EDNS0 options
+	queries.SetEDNSOptions(m, 4096, true)
 
 	// Get client IP address from protocol
 	switch addr := w.RemoteAddr().(type) {
@@ -308,11 +311,12 @@ func handleDNSRequest(w dns.ResponseWriter, r *dns.Msg) {
 		}
 		if !clientTCP || !global.IsFromTCP {
 			// Check if response size is more than 512 bytes
-			if calculateDNSResponseSize(m) > 512 {
+			if calculateDNSResponseSize(m) > 4096 {
 				m.Truncated = true
+				//global.IsFromTCP = true
 			}
 		}
-		global.IsFromTCP = false
+		//global.IsFromTCP = false
 	}
 
 	sendResponse(w, m)

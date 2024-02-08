@@ -179,10 +179,21 @@ func createCacheEntryFromA(resp *dns.Msg) *cache.CacheEntry {
 
 // External functions ------------------------------------------------------- //
 
+// SetEDNSOptions - Set EDNS options
+func SetEDNSOptions(m *dns.Msg, size uint16, do bool) {
+	edns := new(dns.OPT)
+	edns.Hdr.Name = "."
+	edns.Hdr.Rrtype = dns.TypeOPT
+	edns.SetUDPSize(size)
+	edns.SetDo(do)
+	m.Extra = append(m.Extra, edns)
+}
+
 // GetQTypeAnswer - Get answer for allowed Qtype
 func GetQTypeAnswer(hostName string, question dns.Question, upstreamAddr string, clientTCP bool) ([]dns.RR, error) {
 
 	m := &dns.Msg{}
+	SetEDNSOptions(m, 4096, true)
 	m.SetQuestion(dns.Fqdn(hostName), question.Qtype)
 	client := dns.Client{}
 	if clientTCP {
