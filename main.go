@@ -226,6 +226,8 @@ func handleDNSRequest(w dns.ResponseWriter, r *dns.Msg) {
 		clientIP = nil
 	}
 
+	upstreamDefault := upstreams.GetUpstreamServer(config.UpstreamDNSServers, config.BalancingStrategy)
+
 	for _, question := range r.Question {
 		log.Println("Received query for:", question.Name, clientIP, dns.TypeToString[question.Qtype])
 		host := question.Name
@@ -236,7 +238,6 @@ func handleDNSRequest(w dns.ResponseWriter, r *dns.Msg) {
 		htMatch := hosts.GetIndex(_host)
 		//log.Println("Matching:", matching, "Host:", hh)
 		permanentMatching := permanentHosts.GetIndex(_host) || (permanentRegexMap.CheckIsRegexExist(_host) && config.PermanentEnabled)
-		upstreamDefault := upstreams.GetUpstreamServer(config.UpstreamDNSServers, config.BalancingStrategy)
 
 		// Check cache before requesting upstream DNS server
 		stat, _ := entryInCache(m, host, question)
@@ -367,7 +368,7 @@ func SigtermHandler(signal os.Signal) {
 // calculateDNSResponseSize - Calculate DNS response size
 func calculateDNSResponseSize(response *dns.Msg) int {
 	// Сериализация ответа в байты
-	bytes, err := json.Marshal(response)
+	bytes, err := json.Marshal(response.Answer)
 	if err != nil {
 		// Обработка ошибки при сериализации
 		log.Printf("Error marshalling DNS response: %v\n", err)
