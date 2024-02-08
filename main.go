@@ -173,8 +173,24 @@ func isAllowedQtype(qtype uint16, allowedQtypes []string) bool {
 	return false
 }
 
+// Determine function that takes a pointer to dns.Msg
+func sendResponse(w dns.ResponseWriter, response *dns.Msg) {
+	err := w.WriteMsg(response)
+	// If error is occurred, check if it is a connection close error
+	if err != nil {
+		if netErr, ok := err.(net.Error); ok && netErr.Timeout() {
+			// Error is related to connection close
+			log.Println("Connection is closed. Skipping response.")
+			return
+		}
+		// Other errors
+		log.Printf("Error writing DNS response: %v", err)
+		return
+	}
+}
+
 // getQTypeResponse - Get DNS response for A or AAAA query type
-func getQTypeResponse(m *dns.Msg, question dns.Question, host string, clientIP net.IP, upstreamAd string) {
+func getQTypeResponse(m *dns.Msg, question dns.Question, host string, clientTCP bool, upstreamAd string) {
 
 	// Check if Qtype is allowed
 	if isAllowedQtype(question.Qtype, config.AllowedQtypes) {
@@ -183,7 +199,7 @@ func getQTypeResponse(m *dns.Msg, question dns.Question, host string, clientIP n
 			log.Println("Creating answer for allowed Qtype:", question.Qtype)
 		}
 
-		rAnswer, _ := queries.GetQTypeAnswer(host, question, upstreamAd)
+		rAnswer, _ := queries.GetQTypeAnswer(host, question, upstreamAd, clientTCP)
 		if rAnswer != nil {
 			if config.IsDebug {
 				log.Printf("Answer: %s\n", rAnswer)
@@ -209,6 +225,7 @@ func getQTypeResponse(m *dns.Msg, question dns.Question, host string, clientIP n
 func handleDNSRequest(w dns.ResponseWriter, r *dns.Msg) {
 
 	var clientIP net.IP
+	clientTCP := false
 	m := new(dns.Msg)
 	m.SetReply(r)
 	m.Authoritative = true // Set authoritative flag to compress response or not
@@ -217,6 +234,7 @@ func handleDNSRequest(w dns.ResponseWriter, r *dns.Msg) {
 	switch addr := w.RemoteAddr().(type) {
 	case *net.TCPAddr:
 		clientIP = addr.IP
+		clientTCP = true
 		// log.Println("TCP")
 	case *net.UDPAddr:
 		clientIP = addr.IP
@@ -247,12 +265,12 @@ func handleDNSRequest(w dns.ResponseWriter, r *dns.Msg) {
 			// Resolve default hosts using upstream DNS for names not in hosts.txt
 			if (reMatch && !config.Inverse) || (htMatch && !config.Inverse) {
 				log.Println("Resolving with default upstream server (local host):", _host, clientIP, upstreamDefault)
-				getQTypeResponse(m, question, host, clientIP, upstreamDefault)
+				getQTypeResponse(m, question, host, clientTCP, upstreamDefault)
 			} else if permanentMatching {
 				// Get permanent upstreams
 				upstreamPermanet := upstreams.GetUpstreamServer(config.DNSforWhitelisted, config.BalancingStrategy)
 				log.Println("Resolving with permanent upstream server (permanent host):", _host, clientIP, upstreamPermanet)
-				getQTypeResponse(m, question, host, clientIP, upstreamPermanet)
+				getQTypeResponse(m, question, host, clientTCP, upstreamPermanet)
 			} else {
 				if reMatch || htMatch && !permanentHosts.GetIndex(_host) {
 					returnZeroIP(m, clientIP, host)
@@ -260,7 +278,7 @@ func handleDNSRequest(w dns.ResponseWriter, r *dns.Msg) {
 					//if !entryInCache(m, host, question) {
 					//upstreamDefault := upstreams.GetUpstreamServer(config.UpstreamDNSServers, config.BalancingStrategy)
 					log.Println("Resolving with default upstream server (inverse mode):", _host, clientIP, upstreamDefault)
-					getQTypeResponse(m, question, host, clientIP, upstreamDefault)
+					getQTypeResponse(m, question, host, clientTCP, upstreamDefault)
 					//}
 				} else {
 					returnZeroIP(m, clientIP, host)
@@ -273,40 +291,44 @@ func handleDNSRequest(w dns.ResponseWriter, r *dns.Msg) {
 	}
 	prom.IncrementDnsQueriesTotal()
 
-	// Check if response size is more than 512 bytes
-	if calculateDNSResponseSize(m) > 512 {
-		// Stay only answers that fit in 512 bytes
-		var newAnswer []dns.RR
-		var totalSize int
-		for _, rr := range m.Answer {
-			if rr == nil {
-				continue
+	if !clientTCP {
+		// Check if response size is more than 512 bytes
+		if calculateDNSResponseSize(m) > 512 {
+			// Stay only answers that fit in 512 bytes
+			var newAnswer []dns.RR
+			var totalSize int
+			for _, rr := range m.Answer {
+				if rr == nil {
+					continue
+				}
+				raw := rr.String()
+				if totalSize+len(raw) > 512 {
+					break
+				}
+				totalSize += len(raw)
+				newAnswer = append(newAnswer, rr)
 			}
-			raw := rr.String()
-			if totalSize+len(raw) > 512 {
-				break
-			}
-			totalSize += len(raw)
-			newAnswer = append(newAnswer, rr)
+			log.Println("Response is too big. Truncating response.")
+			m.Answer = newAnswer
+			m.Truncated = true
 		}
-		log.Println("Response is too big. Truncating response.")
-		m.Answer = newAnswer
-		m.Truncated = true
 	}
 
-	// Send response to client and try to write response
-	err := w.WriteMsg(m)
-	// If error is occurred, check if it is a connection close error
-	if err != nil {
-		if netErr, ok := err.(net.Error); ok && netErr.Timeout() {
-			// Error is related to connection close
-			log.Println("Connection is closed. Skipping response.")
-			return
-		}
-		// Other errors
-		log.Printf("Error writing DNS response: %v", err)
-		return
-	}
+	sendResponse(w, m)
+
+	//// Send response to client and try to write response
+	//err := w.WriteMsg(m)
+	//// If error is occurred, check if it is a connection close error
+	//if err != nil {
+	//	if netErr, ok := err.(net.Error); ok && netErr.Timeout() {
+	//		// Error is related to connection close
+	//		log.Println("Connection is closed. Skipping response.")
+	//		return
+	//	}
+	//	// Other errors
+	//	log.Printf("Error writing DNS response: %v", err)
+	//	return
+	//}
 
 }
 

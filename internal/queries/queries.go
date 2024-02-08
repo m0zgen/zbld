@@ -177,16 +177,29 @@ func createCacheEntryFromA(resp *dns.Msg) *cache.CacheEntry {
 // External functions ------------------------------------------------------- //
 
 // GetQTypeAnswer - Get answer for allowed Qtype
-func GetQTypeAnswer(hostName string, question dns.Question, upstreamAddr string) ([]dns.RR, error) {
+func GetQTypeAnswer(hostName string, question dns.Question, upstreamAddr string, clientTCP bool) ([]dns.RR, error) {
 
 	m := &dns.Msg{}
 	m.SetQuestion(dns.Fqdn(hostName), question.Qtype)
 	client := dns.Client{}
+	if clientTCP {
+		client = dns.Client{Net: "tcp"}
+	}
 	resp, _, err := client.Exchange(m, upstreamAddr)
 	if err != nil {
-		log.Println("Error get QType answer from client exchange:", err)
-		return nil, err
+		log.Println("Error get QType answer from client exchange (try on TCP):", err)
+		//return nil, err
 	}
+
+	if resp.Truncated {
+		client = dns.Client{Net: "tcp"}
+		resp, _, err = client.Exchange(m, upstreamAddr)
+		if err != nil {
+			log.Println("Error get QType answer from client in TCP:", err)
+			return nil, err
+		}
+	}
+
 	key := cache.GenerateCacheKey(hostName, question.Qtype)
 
 	switch question.Qtype {
