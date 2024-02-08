@@ -184,6 +184,7 @@ func GetQTypeAnswer(hostName string, question dns.Question, upstreamAddr string)
 	client := dns.Client{}
 	resp, _, err := client.Exchange(m, upstreamAddr)
 	if err != nil {
+		log.Println("Error get QType answer from client exchange:", err)
 		return nil, err
 	}
 	key := cache.GenerateCacheKey(hostName, question.Qtype)

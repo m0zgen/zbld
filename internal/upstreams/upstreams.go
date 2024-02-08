@@ -16,7 +16,7 @@ var CurrentIndex = 0
 // isUpstreamServerAvailable - Check if upstream DNS server is available
 func isUpstreamServerAvailable(upstreamAddr string, timeout time.Duration) bool {
 
-	conn, err := net.DialTimeout("udp", upstreamAddr, timeout)
+	conn, err := net.DialTimeout("tcp", upstreamAddr, timeout)
 	if err != nil {
 		return false
 	}
@@ -34,7 +34,7 @@ func isUpstreamServerAvailable(upstreamAddr string, timeout time.Duration) bool 
 func getNextUpstreamServer(upstreams []string) string {
 
 	// Check if first upstream server is available
-	if isUpstreamServerAvailable(upstreams[0], 2*time.Second) {
+	if isUpstreamServerAvailable(upstreams[0], 1*time.Second) {
 		return upstreams[0]
 	}
 
