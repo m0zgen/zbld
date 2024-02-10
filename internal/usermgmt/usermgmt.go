@@ -300,7 +300,8 @@ func applyNewConfig(newFilename string, tmpl *template.Template, newUserConfig U
 		return
 	}
 
-	fmt.Println("Template applied and saved to", newFilename)
+	// Template applied and saved to newFilename
+	fmt.Println("Config:", newFilename)
 	//os.Exit(0)
 }
 
@@ -497,6 +498,9 @@ func GenerateUserConfig(usernameWithAlias string, force bool) {
 
 	generateUserCatalog(username, force)
 	applyNewConfig("users/"+username+"/"+newFilename, tmpl, newUserConfig)
+	fmt.Println("Name:", username)
+	fmt.Println("Alias:", useralias)
+	fmt.Println("Port:", strconv.Itoa(updatedDNSPort))
 	fmt.Printf("Summary: %s-%s,%s\n", username, useralias, strconv.Itoa(updatedDNSPort))
 	os.Exit(0)
 }
