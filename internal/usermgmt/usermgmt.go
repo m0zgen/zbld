@@ -311,6 +311,10 @@ func applyNewConfig(newFilename string, tmpl *template.Template, newUserConfig U
 
 	// Template applied and saved to newFilename
 	fmt.Println("Config:", newFilename)
+	err = fs.SetPermissions(userDirPermissionFor, newFilename)
+	if err != nil {
+		return
+	}
 	//os.Exit(0)
 }
 
