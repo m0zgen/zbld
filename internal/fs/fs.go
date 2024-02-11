@@ -5,6 +5,7 @@ import (
 	"io"
 	"log"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"time"
 )
@@ -29,6 +30,35 @@ func IsDirExists(path string) bool {
 		return false
 	}
 	return false
+}
+
+// SetPermissions проверяет наличие пользователя в системе и назначает права на создаваемый каталог
+func SetPermissions(username, directory string) error {
+	// Check if user exists in system
+	_, err := exec.LookPath("id")
+	if err != nil {
+		return err
+	}
+
+	// Check if user exists with defined username
+	cmd := exec.Command("id", "-u", username)
+	if err := cmd.Run(); err != nil {
+		// If user not exists, set permissions from current user
+		fmt.Println("User", username, "not found. Set permissions for current user.")
+		cmd = exec.Command("chown", os.Getenv("USER"), directory)
+		if err := cmd.Run(); err != nil {
+			return err
+		}
+		return nil
+	}
+
+	// Set permissions for user
+	cmd = exec.Command("chown", "-R", username, directory)
+	if err := cmd.Run(); err != nil {
+		return err
+	}
+
+	return nil
 }
 
 // GenerateDirs - Create directory if not exists

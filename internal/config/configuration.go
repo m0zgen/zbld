@@ -41,6 +41,7 @@ type Config struct {
 	UserConfigTemplate   string   `yaml:"user_config_template"`
 	UsersDir             string   `yaml:"users_dir"`
 	UsersLogDir          string   `yaml:"users_log_dir"`
+	UserDirPermissionFor string   `yaml:"user_dir_permission_for"`
 	AllowedQtypes        []string `yaml:"allowed_qtypes"`
 	TruncateMessages     bool     `yaml:"truncate_messages"`
 }

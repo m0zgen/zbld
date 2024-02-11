@@ -34,6 +34,7 @@ var userHostsPermTmpl string
 var userConfigTemplate string
 var usersDir string
 var usersLogDir string
+var userDirPermissionFor string
 
 // UserConfig - Struct for export yml config params (ListUsers function)
 type UserConfig struct {
@@ -53,6 +54,7 @@ func SetConfig(cfg *configuration.Config) {
 	userConfigTemplate = cfg.UserConfigTemplate
 	usersDir = cfg.UsersDir
 	usersLogDir = cfg.UsersLogDir
+	userDirPermissionFor = cfg.UserDirPermissionFor
 	// ...
 }
 
@@ -108,6 +110,13 @@ func generateUserCatalog(username string, force bool) {
 		log.Println("Error copying file:", err)
 		return
 	}
+
+	err = fs.SetPermissions(userDirPermissionFor, userSpaceDir)
+	if err != nil {
+		log.Println("Error setting permissions:", err)
+		return
+	}
+
 }
 
 // Operations wit users names and aliases -------------------------------- //
