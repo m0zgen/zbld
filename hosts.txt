@@ -6,7 +6,7 @@
 # [ Domain rules ] #
 github.com
 egov.kz
-ps.kz
+# ps.kz
 
 # If add // allow all
 # //

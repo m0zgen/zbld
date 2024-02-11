@@ -19,7 +19,7 @@ allowed_qtypes:
 #  - PTR
 #  - SRV
 #  - SOA
-#  - TXT
+  - TXT
 #  - MX
 # Not implemented yet
 #  - NAPTR

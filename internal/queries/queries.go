@@ -250,29 +250,7 @@ func GetQTypeAnswer(hostName string, question dns.Question, upstreamAddr string,
 
 	//TODO: TXT in a testing status, need to recheck this
 	case dns.TypeTXT:
-		msg := new(dns.Msg)
-		msg.SetQuestion(dns.Fqdn(hostName), dns.TypeTXT)
-		c := new(dns.Client)
-		response, _, err := c.Exchange(msg, upstreamAddr)
-		if err != nil {
-			return nil, err
-		}
-		log.Println("TXT response:", response)
-
-		respTXT, _, err := client.Exchange(m, upstreamAddr)
-		if err != nil {
-			return nil, err
-		}
-
-		if err == nil && len(respTXT.Answer) > 0 {
-			return respTXT.Answer, nil
-		} else {
-			if hasSOARecords(respTXT) {
-				processSOA(respTXT.Ns, m)
-				cache.WriteToCache(key, createCacheEntryFromSOA(m))
-				return m.Answer, nil
-			}
-		}
+		return resp.Answer, nil
 	default:
 		return nil, fmt.Errorf("unsupported DNS query type: %d", question.Qtype)
 	}
