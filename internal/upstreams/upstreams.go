@@ -14,6 +14,7 @@ var CurrentIndex = 0
 
 var bootstrapServers []string
 var checkAvailableDomain string
+var permanentDNS []string
 
 // Config setter -------------------------------------------------------- //
 
@@ -23,6 +24,7 @@ func SetConfig(cfg *configuration.Config) {
 	// Set local variables through cgf.Config
 	bootstrapServers = cfg.BootstrapDNSServers
 	checkAvailableDomain = cfg.CheckAvailableDomain
+	permanentDNS = cfg.DNSforWhitelisted
 	// ...
 }
 
@@ -66,7 +68,7 @@ func getNextUpstreamServer(upstreams []string) string {
 	}
 
 	// If none of the servers are available, return an error or a default value
-	return ""
+	return permanentDNS[0]
 }
 
 // getRobinUpstreamServer - Round-robin upstream balancing policy
@@ -86,7 +88,7 @@ func getRobinUpstreamServer(upstreams []string) string {
 		}
 	}
 	// if bootstrap upstream is not available, return an error or a default value
-	return ""
+	return permanentDNS[0]
 }
 
 // Functions for external usage ---------------------------------------------- //
