@@ -257,6 +257,4 @@ func GetQTypeAnswer(hostName string, question dns.Question, upstreamAddr string,
 	default:
 		return nil, false, fmt.Errorf("unsupported DNS query type: %d", question.Qtype)
 	}
-
-	return nil, false, nil
 }

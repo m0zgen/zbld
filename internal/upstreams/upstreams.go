@@ -3,7 +3,6 @@ package upstreams
 import (
 	"github.com/miekg/dns"
 	"log"
-	"net"
 	"time"
 	configuration "zbld/internal/config"
 )
@@ -14,7 +13,6 @@ import (
 var CurrentIndex = 0
 
 var bootstrapServers []string
-var permanentServers []string
 var checkAvailableDomain string
 
 // Config setter -------------------------------------------------------- //
@@ -24,7 +22,6 @@ var checkAvailableDomain string
 func SetConfig(cfg *configuration.Config) {
 	// Set local variables through cgf.Config
 	bootstrapServers = cfg.BootstrapDNSServers
-	permanentServers = cfg.DNSforWhitelisted
 	checkAvailableDomain = cfg.CheckAvailableDomain
 	// ...
 }
@@ -48,23 +45,6 @@ func checkUpstreamAvailabilityOverDNS(upstreamAddr string, timeout time.Duration
 	}
 
 	// If there is no error, the upstream is available
-	return true
-}
-
-// isUpstreamServerAvailable - Check if upstream DNS server is available
-func isUpstreamServerAvailable(upstreamAddr string, timeout time.Duration) bool {
-
-	conn, err := net.DialTimeout("tcp", upstreamAddr, timeout)
-	if err != nil {
-		return false
-	}
-	defer func(conn net.Conn) {
-		err := conn.Close()
-		if err != nil {
-			log.Println("Error closing connection:", err)
-			return // ignore error
-		}
-	}(conn)
 	return true
 }
 
