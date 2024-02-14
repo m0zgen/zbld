@@ -229,31 +229,44 @@ func GetQTypeAnswer(hostName string, question dns.Question, upstreamAddr string,
 		return processResponse(m, resp, key, err)
 
 	case dns.TypeHTTPS:
-		respHTTPS, _, err := client.Exchange(m, upstreamAddr)
-		if err != nil {
-			return nil, false, err
-		}
-
-		if err == nil && len(respHTTPS.Answer) > 0 {
-
-			if respHTTPS.Answer[0].Header().Rrtype == dns.TypeCNAME {
-				log.Println("CNAME record found for:", hostName)
-				m.SetQuestion(respHTTPS.Answer[0].Header().Name, dns.TypeA)
-				respConvCN, _, errConv := client.Exchange(m, upstreamAddr)
-				return processResponse(m, respConvCN, key, errConv)
-			}
-			cache.WriteToCache(key, createCacheEntryFromA(respHTTPS))
-			return respHTTPS.Answer, false, nil
-		} else {
-			// Re-request as TypeA
+		respHTTPS, _, errHS := client.Exchange(m, upstreamAddr)
+		if errHS != nil {
+			// Try TypeA query if HTTPS query fails
 			m.SetQuestion(hostName, dns.TypeA)
 			respConvA, _, errConv := client.Exchange(m, upstreamAddr)
 			return processResponse(m, respConvA, key, errConv)
 		}
 
+		if len(respHTTPS.Answer) > 0 {
+			if respHTTPS.Answer[0].Header().Rrtype == dns.TypeCNAME {
+				// Convert CNAME to TypeA query
+				cname := respHTTPS.Answer[0].(*dns.CNAME)
+				m.SetQuestion(cname.Target, dns.TypeA)
+				respConvA, _, errConv := client.Exchange(m, upstreamAddr)
+				return processResponse(m, respConvA, key, errConv)
+			}
+			// Cache HTTPS answer
+			cache.WriteToCache(key, createCacheEntryFromA(respHTTPS))
+			return respHTTPS.Answer, false, nil
+		} else {
+			// Try TypeA query if HTTPS answer is empty
+			m.SetQuestion(hostName, dns.TypeA)
+			respConvA, _, errConv := client.Exchange(m, upstreamAddr)
+			return processResponse(m, respConvA, key, errConv)
+		}
 	//TODO: TXT in a testing status, need to recheck this
 	case dns.TypeTXT:
-		return resp.Answer, false, nil
+		// Check if the response has TXT records / errors
+		if err != nil {
+			return nil, false, err
+
+		}
+		// Check if the response has TXT records
+		if len(resp.Answer) == 0 {
+			return nil, false, fmt.Errorf("no answers for TXT query")
+		}
+
+		return resp.Answer, true, nil
 	default:
 		return nil, false, fmt.Errorf("unsupported DNS query type: %d", question.Qtype)
 	}
