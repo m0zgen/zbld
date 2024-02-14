@@ -396,6 +396,20 @@ func SigtermHandler(signal os.Signal) {
 
 // TEST FUNCTIONS ------------------------------------------------------------- //
 
+func lockGlobalMaps() {
+	// Make init global maps vars
+	mu.Lock()
+	hosts = maps.NewHostsMap()
+	permanentHosts = maps.NewPermanentHostsMap()
+	hostsRegexMap = maps.NewHostsRegexMap()
+	permanentRegexMap = maps.NewPermanentHostsRegexMap()
+	cache.GlobalCache.Store = make(map[string]*cache.CacheEntry)
+	counterMap = counter.NewCounterMap()
+	prom.CounterChannel = make(chan string, 1000)
+	mu.Unlock()
+
+}
+
 // RunCacheCleanup - Run cache cleanup routine
 func RunCacheCleanup(interval time.Duration) {
 
@@ -452,7 +466,7 @@ func main() {
 	var permanentFile string
 	var wg = new(sync.WaitGroup)
 
-	// Parse command line arguments
+	// Parse command line arguments --------------------------------------------- //
 	addUserFlag := flag.String("adduser", "", "Username for configuration")
 	delUserFlag := flag.String("deluser", "", "Username for deletion")
 	searchUserAliasFlag := flag.String("searchuser", "", "Search user alias")
@@ -467,21 +481,16 @@ func main() {
 	flag.Parse()
 
 	// Load config and pass params to vars -------------------------------------- //
-
-	// Load config file
 	if err := configuration.LoadConfig(configFile, &config); err != nil {
 		log.Fatalf("Error loading config file: %v", err)
 	}
 
 	// User operations ---------------------------------------------------------- //
-
-	// Add users if -adduser argument is passed
 	if *addUserFlag != "" && *delUserFlag == "" {
 		users.SetConfig(&config)
 		users.GenerateUserConfig(*addUserFlag, *forceFlag)
 	}
 
-	// Delete users if -deluser argument is passed
 	if *delUserFlag != "" && *addUserFlag == "" {
 		users.SetConfig(&config)
 		users.DeleteTargetUser(*delUserFlag, *forceFlag)
@@ -492,7 +501,6 @@ func main() {
 		users.ListUsers(config.UsersDir, *summaryFlag)
 	}
 
-	// Clear logs if -clearlogs argument is passed
 	if *clearLogsFlag {
 		maxAgeDuration, err := time.ParseDuration(config.LogStoreDuration)
 		if err != nil {
@@ -501,57 +509,32 @@ func main() {
 		fs.DeleteOldLogFiles(config.LogDir, maxAgeDuration)
 	}
 
-	// Load hosts --------------------------------------------------------------- //
-
-	// Parse hosts reload interval
-	ReloadInterval, err := time.ParseDuration(config.ReloadInterval)
-	if err != nil {
-		log.Fatalf("Error parsing interval duration: %v", err)
-	}
-
-	// Update hosts_file parameter if -hosts argument is passed
 	if hostsFile != "" {
 		config.HostsFile = hostsFile
 	}
 
-	// Update permanent_whitelisted parameter if -permanent argument is passed
 	if permanentFile != "" {
 		config.PermanentWhitelisted = permanentFile
 	}
 
-	// Search user alias if -searchuser argument is passed
+	ReloadInterval, errReload := time.ParseDuration(config.ReloadInterval)
+	if errReload != nil {
+		log.Fatalf("Error parsing interval duration: %v", errReload)
+	}
+
 	if *searchUserAliasFlag != "" {
 		users.SetConfig(&config)
-		c, err := users.FindConfigFilesWithAlias(config.UsersDir, *searchUserAliasFlag)
-		if err != nil {
-			log.Fatal("Error searching user alias:", err)
-		}
-		// If alias found - Exit
-		if len(c) > 0 {
-			for _, configFile := range c {
-				fmt.Println(configFile)
-			}
-			os.Exit(0)
-		} else {
-			fmt.Println("Alias not found")
-			os.Exit(1)
+		_, errSearchAlias := users.FindConfigFilesWithAlias(config.UsersDir, *searchUserAliasFlag)
+		if errSearchAlias != nil {
+			log.Fatal("Error searching user alias:", errSearchAlias)
 		}
 	}
 
-	// Make init global maps vars
-	mu.Lock()
-	hosts = maps.NewHostsMap()
-	permanentHosts = maps.NewPermanentHostsMap()
-	hostsRegexMap = maps.NewHostsRegexMap()
-	permanentRegexMap = maps.NewPermanentHostsRegexMap()
-	cache.GlobalCache.Store = make(map[string]*cache.CacheEntry)
-	counterMap = counter.NewCounterMap()
-	prom.CounterChannel = make(chan string, 1000)
-	mu.Unlock()
-
-	// Init Prometheus metrics and Logging -------------------------------------- //
+	// Inits & Setup Logging -------------------------------------- //
+	lockGlobalMaps()
 	initMetrics()
 	initLogging()
+
 	// Enable logging to file and stdout
 	if config.EnableLogging {
 		if !fs.IsDirExists(config.LogDir) {
@@ -582,26 +565,15 @@ func main() {
 	}
 
 	// Load hosts with lists package -------------------------------------------- //
-
-	// Pass config to lists package
 	lists.SetConfig(&config)
 	queries.SetConfig(&config)
 	upstreams.SetConfig(&config)
 
+	// Loaders  --------------------------------------------------------------- //
 	lists.LoadHostsWithInterval(config.HostsFile, ReloadInterval, hostsRegexMap, hosts)
 	lists.LoadPermanentHostsWithInterval(config.PermanentWhitelisted, ReloadInterval, permanentRegexMap, permanentHosts)
 
-	// Run CounterChannel goroutine
-	// Define goroutine pool size.
-	poolSize := 10
-	wg.Add(poolSize)
-	// Create goroutine pool.
-	for i := 0; i < poolSize; i++ {
-		go worker(prom.CounterChannel, wg)
-	}
-
 	// Run DNS server ----------------------------------------------------------- //
-
 	// Add goroutines for DNS instances running
 	wg.Add(1)
 	// Run DNS server for UDP requests
@@ -639,7 +611,16 @@ func main() {
 		}()
 	}
 
+	// Channel for prometheus counters ------------------------------------------ //
+	poolSize := 10
+	wg.Add(poolSize)
+	// Create goroutine pool.
+	for i := 0; i < poolSize; i++ {
+		go worker(prom.CounterChannel, wg)
+	}
+
 	// Run Prometheus metrics server
+	//TODO: If disable from config, need disable everyone (include pools)
 	if config.MetricsEnabled {
 		wg.Add(1)
 		go func() {
@@ -653,7 +634,7 @@ func main() {
 		}()
 	}
 
-	// Run log files cleanup
+	// Users log management ---------------------------------------------------------- //
 	if config.EnableLogging {
 		wg.Add(1)
 		// Go routine for creating new log file daily
@@ -663,22 +644,14 @@ func main() {
 		}()
 	}
 
-	// Run cache cleanup routine
-	//wg.Add(1)
-	//go func() {
-	//	defer wg.Done()
-	//	log.Println("Running cache cleanup routine...")
-	//	cache.DeleteExpiredEntries()
-	//	time.Sleep(time.Second)
-	//}()
-
-	cleanDuration, err := time.ParseDuration(config.CacheCleanInterval)
+	// Cache cleanup routine ---------------------------------------------------- //
+	cleanDuration, errCD := time.ParseDuration(config.CacheCleanInterval)
+	if errCD != nil {
+		log.Fatalf("Error parsing interval duration: %v", errCD)
+	}
 	RunCacheCleanup(cleanDuration)
 
 	// Exit on Ctrl+C or SIGTERM ------------------------------------------------ //
-
-	// Handle interrupt signals
-	// Thx: https://www.developer.com/languages/os-signals-go/
 	sigchnl := make(chan os.Signal, 1)
 	signal.Notify(sigchnl)
 	exitchnl := make(chan int)
@@ -692,7 +665,6 @@ func main() {
 	exitcode := <-exitchnl
 
 	// End of program ----------------------------------------------------------- //
-
 	// Close CounterChannel
 	close(prom.CounterChannel)
 	// Waiting for all goroutines to complete and ensure exit

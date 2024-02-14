@@ -189,7 +189,19 @@ func FindConfigFilesWithAlias(rootDir, findUserAlias string) ([]string, error) {
 	})
 
 	if err != nil {
+		log.Println("Error walking through directory:", err)
 		return nil, err
+	}
+
+	// If alias found - Exit
+	if len(configFiles) > 0 {
+		for _, userConfig := range configFiles {
+			fmt.Println(userConfig)
+		}
+		os.Exit(0)
+	} else {
+		fmt.Println("Alias not found")
+		os.Exit(1)
 	}
 
 	return configFiles, nil
