@@ -282,16 +282,15 @@ func handleDNSRequest(w dns.ResponseWriter, r *dns.Msg) {
 		host := question.Name
 		// Delete dot from the end of FQDN
 		_host := strings.TrimRight(host, ".")
-		//matching := lists.IsMatching(_host, hostsRegexMap)
-		reMatch := hostsRegexMap.CheckIsRegexExist(_host)
-		htMatch := hosts.GetIndex(_host)
-		//log.Println("Matching:", matching, "Host:", hh)
-		permanentMatching := permanentHosts.GetIndex(_host) || (permanentRegexMap.CheckIsRegexExist(_host) && config.PermanentEnabled)
 
-		// Check cache before requesting upstream DNS server
 		stat, _ := entryInCache(m, host, question)
-
 		if !stat {
+			//matching := lists.IsMatching(_host, hostsRegexMap)
+			reMatch := hostsRegexMap.CheckIsRegexExist(_host)
+			htMatch := hosts.GetIndex(_host)
+			//log.Println("Matching:", matching, "Host:", hh)
+			permanentMatching := permanentHosts.GetIndex(_host) || (permanentRegexMap.CheckIsRegexExist(_host) && config.PermanentEnabled)
+			// Get upstream server
 			upstreamDefault := upstreams.GetUpstreamServer(config.UpstreamDNSServers, config.BalancingStrategy)
 			// Check if host is in hosts.txt
 			// Resolve default hosts using upstream DNS for names not in hosts.txt
@@ -316,10 +315,10 @@ func handleDNSRequest(w dns.ResponseWriter, r *dns.Msg) {
 					returnZeroIP(m, clientIP, host)
 				}
 			}
-		} else if (reMatch || htMatch) && !permanentHosts.GetIndex(_host) {
-			key := cache.GenerateCacheKey(host, question.Qtype)
-			cache.Del(key)
-		}
+		} // else if (reMatch || htMatch) && !permanentHosts.GetIndex(_host) {
+		//	key := cache.GenerateCacheKey(host, question.Qtype)
+		//	cache.Del(key)
+		//}
 	}
 
 	if config.TruncateMessages {
