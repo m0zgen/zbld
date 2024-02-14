@@ -382,7 +382,7 @@ func ListUsers(dir string, summary bool) {
 			if summary {
 				fmt.Printf("%s-%s,%s\n", userName, userAlias, userDNSPort)
 			} else {
-				fmt.Printf("Name: %s, Alias: %s, Port: %s, Comment: %s\n", userName, userAlias, userDNSPort, userComment)
+				fmt.Printf("UserName: %s, Alias: %s, Port: %s, Comment: %s\n", userName, userAlias, userDNSPort, userComment)
 			}
 		}
 	}
@@ -413,9 +413,9 @@ func GenerateUserConfig(usernameWithAlias string, force bool) {
 		if !force {
 			// If alis found - Exit
 			if len(configFiles) > 0 {
-				log.Println("Config files containing user alias found:")
+				log.Println("Alias found:")
 				for _, configFile := range configFiles {
-					fmt.Println(configFile)
+					fmt.Println("Config:", configFile)
 				}
 				log.Println("User alias already exists. Exiting...")
 				os.Exit(1)
@@ -511,7 +511,7 @@ func GenerateUserConfig(usernameWithAlias string, force bool) {
 
 	generateUserCatalog(username, force)
 	applyNewConfig("users/"+username+"/"+newFilename, tmpl, newUserConfig)
-	fmt.Println("Name:", username)
+	fmt.Println("UserName:", username)
 	fmt.Println("Alias:", useralias)
 	fmt.Println("Port:", strconv.Itoa(updatedDNSPort))
 	fmt.Printf("Summary: %s-%s,%s\n", username, useralias, strconv.Itoa(updatedDNSPort))

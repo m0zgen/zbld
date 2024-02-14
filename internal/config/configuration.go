@@ -27,6 +27,7 @@ type Config struct {
 	Inverse              bool     `yaml:"inverse"`
 	CacheTTLSeconds      int      `yaml:"cache_ttl_seconds"`
 	CacheEnabled         bool     `yaml:"cache_enabled"`
+	CacheCleanInterval   string   `yaml:"cache_clean_duration"`
 	MetricsEnabled       bool     `yaml:"metrics_enabled"`
 	MetricsPort          int      `yaml:"metrics_port"`
 	PromTopNameIncAfter  int      `yaml:"prom_top_name_inc_after"`
@@ -44,6 +45,8 @@ type Config struct {
 	UserDirPermissionFor string   `yaml:"user_dir_permission_for"`
 	AllowedQtypes        []string `yaml:"allowed_qtypes"`
 	TruncateMessages     bool     `yaml:"truncate_messages"`
+	BootstrapDNSServers  []string `yaml:"bootstrap_dns_servers"`
+	CheckAvailableDomain string   `yaml:"check_available_domain"`
 }
 
 // LoadConfig - Load configuration from file

@@ -58,6 +58,14 @@ func entryInCache(m *dns.Msg, host string, question dns.Question) (bool, []dns.R
 			log.Println("Cache hit answer for:", host, entry.IPv4, entry.IPv6)
 		}
 
+		for _, rr := range entry.DnsMsg.Ns {
+			if soaRecord, ok := rr.(*dns.SOA); ok {
+				// Это запись типа SOA
+				log.Println("Cache hit answer has AUTHORITY SECTION:", soaRecord)
+				m.Ns = append(m.Ns, soaRecord)
+			}
+		}
+
 		m.Answer = append(m.Answer, entry.DnsMsg.Answer...)
 		if counterMap.Get(host) <= config.PromTopNameIncAfter {
 			//log.Println("Host count index:", counterMap.Get(host))
@@ -212,13 +220,23 @@ func getQTypeResponse(m *dns.Msg, question dns.Question, host string, clientTCP 
 			log.Println("Creating answer for allowed Qtype:", question.Qtype)
 		}
 
-		rAnswer, _ := queries.GetQTypeAnswer(host, question, upstreamAd, clientTCP)
+		rAnswer, isAnswerExist, _ := queries.GetQTypeAnswer(host, question, upstreamAd, clientTCP)
 		if rAnswer != nil {
 			if config.IsDebug {
 				log.Printf("Answer: %s\n", rAnswer)
 			}
-			m.Answer = append(m.Answer, rAnswer...)
-			//prom.SuccessfulResolutionsTotal.Inc()
+
+			if isAnswerExist {
+				m.Answer = append(m.Answer, rAnswer...)
+			} else {
+				for _, rr := range rAnswer {
+					if soaRecord, ok := rr.(*dns.SOA); ok {
+						// Это запись типа SOA
+						m.Ns = append(m.Ns, soaRecord)
+					}
+				}
+			}
+
 			prom.IncrementSuccessfulResolutionsTotal()
 		} else {
 			log.Println("Answer is empty set response code to (NXDOMAIN) for:", host, dns.RcodeNameError)
@@ -241,7 +259,7 @@ func handleDNSRequest(w dns.ResponseWriter, r *dns.Msg) {
 	clientTCP := false
 	m := new(dns.Msg)
 	m.SetReply(r)
-	m.Authoritative = true // Set authoritative flag to compress response or not
+	//m.Authoritative = false // Set authoritative flag to compress response or not
 	// Set EDNS0 options
 	queries.SetEDNSOptions(m, 4096, true)
 
@@ -259,8 +277,6 @@ func handleDNSRequest(w dns.ResponseWriter, r *dns.Msg) {
 		clientIP = nil
 	}
 
-	upstreamDefault := upstreams.GetUpstreamServer(config.UpstreamDNSServers, config.BalancingStrategy)
-
 	for _, question := range r.Question {
 		log.Println("Received query for:", question.Name, clientIP, dns.TypeToString[question.Qtype])
 		host := question.Name
@@ -276,6 +292,7 @@ func handleDNSRequest(w dns.ResponseWriter, r *dns.Msg) {
 		stat, _ := entryInCache(m, host, question)
 
 		if !stat {
+			upstreamDefault := upstreams.GetUpstreamServer(config.UpstreamDNSServers, config.BalancingStrategy)
 			// Check if host is in hosts.txt
 			// Resolve default hosts using upstream DNS for names not in hosts.txt
 			if (reMatch && !config.Inverse) || (htMatch && !config.Inverse) {
@@ -378,6 +395,19 @@ func SigtermHandler(signal os.Signal) {
 }
 
 // TEST FUNCTIONS ------------------------------------------------------------- //
+
+// RunCacheCleanup - Run cache cleanup routine
+func RunCacheCleanup(interval time.Duration) {
+
+	// Goroutine for periodic lists reload
+	go func() {
+		for {
+			log.Println("Running cache cleanup routine... Interval:", interval, "seconds.")
+			cache.DeleteExpiredEntries()
+			time.Sleep(interval)
+		}
+	}()
+}
 
 // calculateDNSResponseSize - Calculate DNS response size
 func calculateDNSResponseSize(response *dns.Msg) int {
@@ -556,6 +586,7 @@ func main() {
 	// Pass config to lists package
 	lists.SetConfig(&config)
 	queries.SetConfig(&config)
+	upstreams.SetConfig(&config)
 
 	lists.LoadHostsWithInterval(config.HostsFile, ReloadInterval, hostsRegexMap, hosts)
 	lists.LoadPermanentHostsWithInterval(config.PermanentWhitelisted, ReloadInterval, permanentRegexMap, permanentHosts)
@@ -631,6 +662,19 @@ func main() {
 			fs.CreateNewLogFileDaily(config.LogDir + "/" + config.LogFile)
 		}()
 	}
+
+	// Run cache cleanup routine
+	//wg.Add(1)
+	//go func() {
+	//	defer wg.Done()
+	//	log.Println("Running cache cleanup routine...")
+	//	cache.DeleteExpiredEntries()
+	//	time.Sleep(time.Second)
+	//}()
+
+	cleanDuration, err := time.ParseDuration(config.CacheCleanInterval)
+	RunCacheCleanup(cleanDuration)
+
 	// Exit on Ctrl+C or SIGTERM ------------------------------------------------ //
 
 	// Handle interrupt signals

@@ -3,6 +3,7 @@ package cache
 import (
 	"fmt"
 	"github.com/miekg/dns"
+	"log"
 	"net"
 	"sync"
 	"time"
@@ -80,6 +81,19 @@ func Del(key string) {
 	GlobalCache.mu.Lock()
 	defer GlobalCache.mu.Unlock()
 	delete(GlobalCache.Store, key)
+}
+
+// DeleteExpiredEntries - Delete expired entries from cache
+func DeleteExpiredEntries() {
+	GlobalCache.mu.Lock()
+	defer GlobalCache.mu.Unlock()
+	for key, entry := range GlobalCache.Store {
+		if time.Now().After(entry.CreationTime.Add(entry.TTL)) {
+			log.Println("Delete expired entry from cache:", key)
+			delete(GlobalCache.Store, key)
+		}
+	}
+
 }
 
 // WriteToCache - Add records to GlobalCache

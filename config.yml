@@ -9,19 +9,28 @@ upstream_dns_servers:
 permanent_dns_servers:
   - "95.85.95.85:53"
   - "2.56.220.2:53"
+# Bootstrap / Fallback DNS server
+bootstrap_dns_servers:
+  - "208.67.222.222:53"
+  - "208.67.220.220:53"
+  - "1.1.1.1:53"
+  - "2.56.220.2:53"
+# Domain for upstream availability checking (dot at the end is required)
+check_available_domain: "openbld.net."
 # Allowed query types
 allowed_qtypes:
   - A
   - AAAA
   - HTTPS
   - CNAME
-#  - NS
+  - NS
+# In testing
 #  - PTR
 #  - SRV
 #  - SOA
-#  - TXT
 #  - MX
 # Not implemented yet
+#  - TXT
 #  - NAPTR
 #  - DS
 #  - DNSKEY
@@ -79,6 +88,8 @@ log_file: "zbld_root"
 cache_enabled: true
 # Stale cache entries will be removed after this many seconds
 cache_ttl_seconds: 3600
+# Check cache interval for purging expired entries
+cache_clean_duration: 12h
 
 # Prometheus Metrics
 metrics_enabled: true

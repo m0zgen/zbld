@@ -6,6 +6,14 @@ permanent_dns_servers:
   - "95.85.95.85:53"
   - "2.56.220.2:53"
 load_balancing_strategy: "robin"
+# Bootstrap / Fallback DNS server
+bootstrap_dns_servers:
+  - "208.67.222.222:53"
+  - "208.67.220.220:53"
+  - "1.1.1.1:53"
+  - "2.56.220.2:53"
+# Domain for upstream availability checking
+check_available_domain: "openbld.net."
 allowed_qtypes:
   - A
   - AAAA
@@ -30,6 +38,7 @@ log_store_duration: 24h
 log_dir: "users/logs"
 cache_enabled: true
 cache_ttl_seconds: 3600
+cache_clean_duration: 12h
 metrics_enabled: true
 # Prometheus top name increment after N requests for unique domains
 prom_top_name_inc_after: 100

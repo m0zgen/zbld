@@ -91,12 +91,13 @@ func processSOA(answerRR []dns.RR, m *dns.Msg) {
 			// Extract needed data from SOA record
 			// As example: soa.Ns, soa.Mbox, soa.Serial etc.
 			// Then add this data to the answer
-			m.Answer = append(m.Answer, &dns.SOA{
+			m.Ns = append(m.Answer, &dns.SOA{
 				Hdr: dns.RR_Header{
-					Name:   m.Question[0].Name,
-					Rrtype: dns.TypeSOA,
-					Class:  dns.ClassINET,
-					Ttl:    soa.Hdr.Ttl},
+					Name:     m.Question[0].Name,
+					Rrtype:   dns.TypeSOA,
+					Class:    dns.ClassINET,
+					Rdlength: soa.Hdr.Rdlength,
+					Ttl:      soa.Hdr.Ttl},
 				Ns:      soa.Ns,
 				Mbox:    soa.Mbox,
 				Serial:  soa.Serial,
@@ -111,24 +112,26 @@ func processSOA(answerRR []dns.RR, m *dns.Msg) {
 }
 
 // processResponse - Process response and return answer
-func processResponse(m *dns.Msg, resp *dns.Msg, key string, err error) ([]dns.RR, error) {
-
+func processResponse(m *dns.Msg, resp *dns.Msg, key string, err error) ([]dns.RR, bool, error) {
 	if err != nil {
-		return nil, err
+		return nil, false, err
 	}
+
+	var isAnswerExist = false
 
 	if len(resp.Answer) > 0 {
 		cache.WriteToCache(key, createCacheEntryFromA(resp))
-		return resp.Answer, nil
+		isAnswerExist = true
+		return resp.Answer, isAnswerExist, nil
 	}
 
 	if hasSOARecords(resp) {
 		processSOA(resp.Ns, m)
 		cache.WriteToCache(key, createCacheEntryFromSOA(m))
-		return m.Answer, nil
+		return m.Ns, isAnswerExist, nil
 	}
 
-	return nil, nil
+	return nil, isAnswerExist, nil
 }
 
 // Caching functions -------------------------------------------------------- //
@@ -190,7 +193,7 @@ func SetEDNSOptions(m *dns.Msg, size uint16, do bool) {
 }
 
 // GetQTypeAnswer - Get answer for allowed Qtype
-func GetQTypeAnswer(hostName string, question dns.Question, upstreamAddr string, clientTCP bool) ([]dns.RR, error) {
+func GetQTypeAnswer(hostName string, question dns.Question, upstreamAddr string, clientTCP bool) ([]dns.RR, bool, error) {
 
 	m := &dns.Msg{}
 	SetEDNSOptions(m, 4096, true)
@@ -214,7 +217,7 @@ func GetQTypeAnswer(hostName string, question dns.Question, upstreamAddr string,
 		resp, _, err = client.Exchange(m, upstreamAddr)
 		if err != nil {
 			log.Println("Error get QType answer from client in TCP:", err)
-			return nil, err
+			return nil, false, err
 		}
 	}
 
@@ -228,7 +231,7 @@ func GetQTypeAnswer(hostName string, question dns.Question, upstreamAddr string,
 	case dns.TypeHTTPS:
 		respHTTPS, _, err := client.Exchange(m, upstreamAddr)
 		if err != nil {
-			return nil, err
+			return nil, false, err
 		}
 
 		if err == nil && len(respHTTPS.Answer) > 0 {
@@ -240,7 +243,7 @@ func GetQTypeAnswer(hostName string, question dns.Question, upstreamAddr string,
 				return processResponse(m, respConvCN, key, errConv)
 			}
 			cache.WriteToCache(key, createCacheEntryFromA(respHTTPS))
-			return respHTTPS.Answer, nil
+			return respHTTPS.Answer, false, nil
 		} else {
 			// Re-request as TypeA
 			m.SetQuestion(hostName, dns.TypeA)
@@ -250,10 +253,10 @@ func GetQTypeAnswer(hostName string, question dns.Question, upstreamAddr string,
 
 	//TODO: TXT in a testing status, need to recheck this
 	case dns.TypeTXT:
-		return resp.Answer, nil
+		return resp.Answer, false, nil
 	default:
-		return nil, fmt.Errorf("unsupported DNS query type: %d", question.Qtype)
+		return nil, false, fmt.Errorf("unsupported DNS query type: %d", question.Qtype)
 	}
 
-	return nil, nil
+	return nil, false, nil
 }
