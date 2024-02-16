@@ -15,6 +15,7 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"runtime"
 	"strings"
 	"sync"
 	"syscall"
@@ -39,6 +40,7 @@ var permanentHosts *maps.PermanentHostsMap
 var hostsRegexMap *maps.HostsRegexMap
 var permanentRegexMap *maps.PermanentHostsRegexMap
 var counterMap *counter.CounterMap
+var upstreamStatus *upstreams.UpstreamStatus
 var mu sync.Mutex
 
 //var upstreamServers []string
@@ -252,6 +254,48 @@ func getQTypeResponse(m *dns.Msg, question dns.Question, host string, clientTCP 
 
 }
 
+func processQuestion(m *dns.Msg, question dns.Question, clientIP net.IP, clientTCP bool) {
+	log.Println("Received query for:", question.Name, clientIP, dns.TypeToString[question.Qtype])
+	host := question.Name
+	stat, _ := entryInCache(m, host, question)
+	// Check if host is in cache
+	if !stat {
+		// Delete dot from the end of FQDN
+		_host := strings.TrimRight(host, ".")
+		//matching := lists.IsMatching(_host, hostsRegexMap)
+		reMatch := hostsRegexMap.CheckIsRegexExist(_host)
+		htMatch := hosts.GetIndex(_host)
+		//log.Println("Matching:", matching, "Host:", hh)
+		permanentMatching := permanentHosts.GetIndex(_host) || (permanentRegexMap.CheckIsRegexExist(_host) && config.PermanentEnabled)
+		// Check if host is in hosts.txt
+		// Resolve default hosts using upstream DNS for names not in hosts.txt
+		if (reMatch && !config.Inverse) || (htMatch && !config.Inverse) {
+			upstreamDefault := upstreams.GetUpstreamServer(config.UpstreamDNSServers, config.BalancingStrategy, upstreamStatus)
+			log.Println("Resolving with default upstream server (local host):", _host, clientIP, upstreamDefault)
+			getQTypeResponse(m, question, host, clientTCP, upstreamDefault)
+		} else if permanentMatching {
+			upstreamPermanet := upstreams.GetUpstreamServer(config.DNSforWhitelisted, config.BalancingStrategy, upstreamStatus)
+			log.Println("Resolving with permanent upstream server (permanent host):", _host, clientIP, upstreamPermanet)
+			getQTypeResponse(m, question, host, clientTCP, upstreamPermanet)
+		} else {
+			if reMatch || htMatch && !permanentHosts.GetIndex(_host) {
+				returnZeroIP(m, clientIP, host)
+			} else if config.Inverse {
+				upstreamDefault := upstreams.GetUpstreamServer(config.UpstreamDNSServers, config.BalancingStrategy, upstreamStatus)
+				log.Println("Resolving with default upstream server (inverse mode):", _host, clientIP, upstreamDefault)
+				getQTypeResponse(m, question, host, clientTCP, upstreamDefault)
+				//}
+			} else {
+				returnZeroIP(m, clientIP, host)
+			}
+		}
+	}
+	// else if (reMatch || htMatch) && !permanentHosts.GetIndex(_host) {
+	//	key := cache.GenerateCacheKey(host, question.Qtype)
+	//	cache.Del(key)
+	//}
+}
+
 // handleDNSRequest - Handle DNS request from client
 func handleDNSRequest(w dns.ResponseWriter, r *dns.Msg) {
 
@@ -277,48 +321,19 @@ func handleDNSRequest(w dns.ResponseWriter, r *dns.Msg) {
 		clientIP = nil
 	}
 
-	for _, question := range r.Question {
-		log.Println("Received query for:", question.Name, clientIP, dns.TypeToString[question.Qtype])
-		host := question.Name
-		// Delete dot from the end of FQDN
-		_host := strings.TrimRight(host, ".")
-
-		stat, _ := entryInCache(m, host, question)
-		if !stat {
-			//matching := lists.IsMatching(_host, hostsRegexMap)
-			reMatch := hostsRegexMap.CheckIsRegexExist(_host)
-			htMatch := hosts.GetIndex(_host)
-			//log.Println("Matching:", matching, "Host:", hh)
-			permanentMatching := permanentHosts.GetIndex(_host) || (permanentRegexMap.CheckIsRegexExist(_host) && config.PermanentEnabled)
-			// Get upstream server
-			upstreamDefault := upstreams.GetUpstreamServer(config.UpstreamDNSServers, config.BalancingStrategy)
-			// Check if host is in hosts.txt
-			// Resolve default hosts using upstream DNS for names not in hosts.txt
-			if (reMatch && !config.Inverse) || (htMatch && !config.Inverse) {
-				log.Println("Resolving with default upstream server (local host):", _host, clientIP, upstreamDefault)
-				getQTypeResponse(m, question, host, clientTCP, upstreamDefault)
-			} else if permanentMatching {
-				// Get permanent upstreams
-				upstreamPermanet := upstreams.GetUpstreamServer(config.DNSforWhitelisted, config.BalancingStrategy)
-				log.Println("Resolving with permanent upstream server (permanent host):", _host, clientIP, upstreamPermanet)
-				getQTypeResponse(m, question, host, clientTCP, upstreamPermanet)
-			} else {
-				if reMatch || htMatch && !permanentHosts.GetIndex(_host) {
-					returnZeroIP(m, clientIP, host)
-				} else if config.Inverse {
-					//if !entryInCache(m, host, question) {
-					//upstreamDefault := upstreams.GetUpstreamServer(config.UpstreamDNSServers, config.BalancingStrategy)
-					log.Println("Resolving with default upstream server (inverse mode):", _host, clientIP, upstreamDefault)
-					getQTypeResponse(m, question, host, clientTCP, upstreamDefault)
-					//}
-				} else {
-					returnZeroIP(m, clientIP, host)
-				}
+	if questionCount := len(r.Question); questionCount > 0 {
+		// If only one question
+		if questionCount == 1 {
+			// Process question
+			question := r.Question[0]
+			processQuestion(m, question, clientIP, clientTCP)
+		} else {
+			// Multiple questions
+			for _, question := range r.Question {
+				processQuestion(m, question, clientIP, clientTCP)
 			}
-		} // else if (reMatch || htMatch) && !permanentHosts.GetIndex(_host) {
-		//	key := cache.GenerateCacheKey(host, question.Qtype)
-		//	cache.Del(key)
-		//}
+
+		}
 	}
 
 	if config.TruncateMessages {
@@ -394,7 +409,6 @@ func SigtermHandler(signal os.Signal) {
 }
 
 // TEST FUNCTIONS ------------------------------------------------------------- //
-
 func lockGlobalMaps() {
 	// Make init global maps vars
 	mu.Lock()
@@ -404,6 +418,7 @@ func lockGlobalMaps() {
 	permanentRegexMap = maps.NewPermanentHostsRegexMap()
 	cache.GlobalCache.Store = make(map[string]*cache.CacheEntry)
 	counterMap = counter.NewCounterMap()
+	upstreamStatus = upstreams.MakeUpstreamMap()
 	prom.CounterChannel = make(chan string, 1000)
 	mu.Unlock()
 
@@ -455,6 +470,30 @@ func worker(tasks <-chan string, wg *sync.WaitGroup) {
 	}
 }
 
+func serve(net string, soreuseport bool) {
+	switch net {
+	case "":
+		server := &dns.Server{Addr: fmt.Sprintf(":%d", config.DNSPort), Net: net, ReusePort: soreuseport}
+		dns.HandleFunc(".", func(w dns.ResponseWriter, r *dns.Msg) {
+			handleDNSRequest(w, r)
+		})
+		log.Printf("DNS server is listening on :%d (%s)...\n", config.DNSPort, net)
+		if err := server.ListenAndServe(); err != nil {
+			fmt.Printf("Failed to setup the UDP server: %s\n", err.Error())
+		}
+	default:
+		server := &dns.Server{Addr: fmt.Sprintf(":%d", config.DNSPort), Net: net, ReusePort: soreuseport}
+		dns.HandleFunc(".", func(w dns.ResponseWriter, r *dns.Msg) {
+			handleDNSRequest(w, r)
+		})
+		log.Printf("DNS server is listening on :%d (%s)...\n", config.DNSPort, net)
+		if err := server.ListenAndServe(); err != nil {
+			fmt.Printf("Failed to setup the %s server: %s\n", net, err.Error())
+		}
+
+	}
+}
+
 // ---------------------------------------------------------------------------- //
 
 // main - Main function. Init config, load hosts, run DNS server
@@ -473,6 +512,9 @@ func main() {
 	clearLogsFlag := flag.Bool("clearlogs", false, "Clear logs")
 	listUsersFlag := flag.Bool("listusers", false, "List existing users")
 	summaryFlag := flag.Bool("summary", false, "Show summary user info")
+	cpuFlag := flag.Int("cpu", 0, "Number of CPU cores")
+	soreUsePortFlag := flag.Int("reuseport", 0, "Enable SO_REUSEPORT")
+
 	// Another flags
 	flag.StringVar(&configFile, "config", "config.yml", "Config file path")
 	flag.StringVar(&hostsFile, "hosts", "hosts.txt", "Hosts file path")
@@ -533,6 +575,12 @@ func main() {
 	lockGlobalMaps()
 	initMetrics()
 	initLogging()
+	// Available strategy maker
+	upstreams.SetDefaultUpstreamInfo(upstreamStatus, config.UpstreamDNSServers)
+	upstreams.SetDefaultUpstreamInfo(upstreamStatus, config.DNSforWhitelisted)
+	if config.FirstAvailableEnabled {
+		go upstreams.MonitorUpstreams(upstreamStatus)
+	}
 
 	// Enable logging to file and stdout
 	if config.EnableLogging {
@@ -573,41 +621,20 @@ func main() {
 	lists.LoadPermanentHostsWithInterval(config.PermanentWhitelisted, ReloadInterval, permanentRegexMap, permanentHosts)
 
 	// Run DNS server ----------------------------------------------------------- //
-	// Add goroutines for DNS instances running
-	wg.Add(1)
-	// Run DNS server for UDP requests
-	go func() {
-		defer wg.Done()
 
-		udpServer := &dns.Server{Addr: fmt.Sprintf(":%d", config.DNSPort), Net: "udp"}
-		dns.HandleFunc(".", func(w dns.ResponseWriter, r *dns.Msg) {
-			handleDNSRequest(w, r)
-		})
+	if *cpuFlag != 0 {
+		log.Println("Setting cpus to:", *cpuFlag)
+		runtime.GOMAXPROCS(*cpuFlag)
+	}
 
-		log.Printf("DNS server is listening on :%d (UDP)...\n", config.DNSPort)
-		err := udpServer.ListenAndServe()
-		if err != nil {
-			log.Printf("Error starting DNS server (UDP): %s\n", err)
+	if *soreUsePortFlag > 0 {
+		for i := 0; i < *soreUsePortFlag; i++ {
+			go serve("udp", true)
+			go serve("tcp", true)
 		}
-	}()
-
-	if config.EnableDNSTcp {
-		// Run DNS server for TCP requests
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
-
-			tcpServer := &dns.Server{Addr: fmt.Sprintf(":%d", config.DNSPort), Net: "tcp"}
-			dns.HandleFunc(".", func(w dns.ResponseWriter, r *dns.Msg) {
-				handleDNSRequest(w, r)
-			})
-
-			log.Printf("DNS server is listening on :%d (TCP)...\n", config.DNSPort)
-			err := tcpServer.ListenAndServe()
-			if err != nil {
-				log.Printf("Error starting DNS server (TCP): %s\n", err)
-			}
-		}()
+	} else {
+		go serve("udp", false)
+		go serve("tcp", false)
 	}
 
 	// Channel for prometheus counters ------------------------------------------ //

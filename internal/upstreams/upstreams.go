@@ -3,6 +3,8 @@ package upstreams
 import (
 	"github.com/miekg/dns"
 	"log"
+	"sync"
+	"sync/atomic"
 	"time"
 	configuration "zbld/internal/config"
 )
@@ -15,6 +17,39 @@ var CurrentIndex = 0
 var bootstrapServers []string
 var checkAvailableDomain string
 var permanentDNS []string
+var availableIntervalDuration time.Duration
+var lastSelectedUpstreamIndex int // Глобальная переменная для хранения индекса последнего выбранного апстрима
+
+// Upstream routines ------------------------------------------------------- //
+
+// UpstreamInfo - Upstream server information
+type UpstreamInfo struct {
+	Available    bool          // Флаг доступности
+	LastCheck    time.Time     // Время последней проверки
+	Rise         int           // Количество успешных попыток перед пометкой как доступного
+	ResponseTime time.Duration // Время ответа сервера
+}
+
+// UpstreamStatus - Map to store information about upstreams
+type UpstreamStatus struct {
+	sync.RWMutex
+	Server map[string]UpstreamInfo
+}
+
+// MakeUpstreamMap - create new hostsMap
+func MakeUpstreamMap() *UpstreamStatus {
+	return &UpstreamStatus{
+		Server: make(map[string]UpstreamInfo),
+	}
+}
+
+// Объявляем атомическую переменную для карты апстримов
+var atomicUpstreamStatus atomic.Value
+
+func init() {
+	// Инициализируем пустую карту
+	atomicUpstreamStatus.Store(make(map[string]*UpstreamInfo))
+}
 
 // Config setter -------------------------------------------------------- //
 
@@ -25,6 +60,8 @@ func SetConfig(cfg *configuration.Config) {
 	bootstrapServers = cfg.BootstrapDNSServers
 	checkAvailableDomain = cfg.CheckAvailableDomain
 	permanentDNS = cfg.DNSforWhitelisted
+	availableIntervalDuration, _ = time.ParseDuration(cfg.FirtsAvailableInterval)
+
 	// ...
 }
 
@@ -94,19 +131,147 @@ func getRobinUpstreamServer(upstreams []string) string {
 // Functions for external usage ---------------------------------------------- //
 
 // GetUpstreamServer - Get upstream server and apply balancing strategy (call from DNS handler
-func GetUpstreamServer(upstreams []string, balancingPolicy string) string {
+func GetUpstreamServer(upstreams []string, balancingPolicy string, upstreamStatus *UpstreamStatus) string {
 
 	switch balancingPolicy {
 	case "robin":
 		//log.Println("Round-robin strategy")
 		return getRobinUpstreamServer(upstreams)
 	case "strict":
-		//log.Println("Strict strategy")
 		return getNextUpstreamServer(upstreams)
+	case "available":
+		//log.Printf("Available strategy")
+		return getFastestAvailableUpstream(upstreamStatus)
 	default:
 		// Default strategy is robin
 		//log.Println("Default strategy (robin)")
 		return getRobinUpstreamServer(upstreams)
 	}
 
+}
+
+// Upstream Routines ------------------------------------------------------- //
+
+// MonitorUpstreams - Periodically check the availability of all upstreams
+// MonitorUpstreams - функция для мониторинга состояния апстримов
+// MonitorUpstreams - функция для мониторинга состояния апстримов
+func MonitorUpstreams(upstreamStatus *UpstreamStatus) {
+	previousState := make(map[string]bool)
+
+	for {
+		upstreamStatus.Lock()
+		for upstream := range upstreamStatus.Server {
+			startTime := time.Now() // Засекаем время перед отправкой запроса
+
+			currentState := checkUpstreamAvailabilityOverDNS(upstream, 200*time.Millisecond)
+			if currentState != previousState[upstream] {
+				if currentState {
+					log.Printf("Upstream %s is marked up\n", upstream)
+				} else {
+					log.Printf("Upstream %s is marked down\n", upstream)
+				}
+				previousState[upstream] = currentState
+			}
+
+			// Обновляем значение структуры UpstreamInfo
+			upstreamInfo := upstreamStatus.Server[upstream]
+			if currentState {
+				upstreamInfo.Rise++
+			} else {
+				upstreamInfo.Rise = 0
+			}
+
+			// Проверяем, если счетчик Rise достиг заданного значения
+			if upstreamInfo.Rise >= 1 {
+				//log.Printf("Upstream %s is marked as available\n", upstream)
+				upstreamInfo.Available = true
+			} else {
+				upstreamInfo.Available = false
+			}
+
+			// Записываем время ответа сервера
+			upstreamInfo.ResponseTime = time.Since(startTime)
+
+			// Обновляем карту
+			upstreamStatus.Server[upstream] = upstreamInfo
+		}
+		upstreamStatus.Unlock()
+
+		time.Sleep(availableIntervalDuration) // Интервал проверки - 5 секунд
+	}
+}
+
+// SetDefaultUpstreamInfo - Set default upstream server information in to the map
+func SetDefaultUpstreamInfo(upstreamStatus *UpstreamStatus, upstreams []string) {
+	upstreamStatus.Lock()
+	defer upstreamStatus.Unlock()
+
+	for _, upstream := range upstreams {
+		upstreamStatus.Server[upstream] = UpstreamInfo{
+			Available: true,
+			LastCheck: time.Now(),
+		}
+	}
+}
+
+// getAvailableUpstream - Get current available upstream
+func getFastestAvailableUpstream(upstreamStatus *UpstreamStatus) string {
+
+	var fastestUpstream string
+	var fastestResponseTime time.Duration
+
+	upstreamStatus.RLock()
+	defer upstreamStatus.RUnlock()
+
+	// Return first available upstream from the map
+	for upstream, info := range upstreamStatus.Server {
+		if info.Available && (fastestResponseTime == 0 || info.ResponseTime < fastestResponseTime) {
+			fastestUpstream = upstream
+			fastestResponseTime = info.ResponseTime
+		}
+	}
+
+	if fastestUpstream != "" {
+		return fastestUpstream
+	} else {
+		// If upstreams marked as not available, use bootstrap upstream
+		for _, bootstrap := range bootstrapServers {
+			if checkUpstreamAvailabilityOverDNS(bootstrap, 500*time.Millisecond) {
+				return bootstrap
+			}
+		}
+	}
+
+	//return ""
+	return permanentDNS[0] // Return default value
+}
+
+func getAvailableUpstream(upstreamStatus *UpstreamStatus) string {
+	upstreamStatus.RLock()
+	defer upstreamStatus.RUnlock()
+
+	// Получаем список доступных апстримов
+	availableUpstreams := make([]string, 0)
+	for upstream, info := range upstreamStatus.Server {
+		if info.Available {
+			availableUpstreams = append(availableUpstreams, upstream)
+		}
+	}
+
+	// Проверяем, есть ли доступные апстримы
+	if len(availableUpstreams) == 0 {
+		// Если нет доступных апстримов, используем bootstrap серверы или значение по умолчанию
+		for _, bootstrap := range bootstrapServers {
+			if checkUpstreamAvailabilityOverDNS(bootstrap, 500*time.Millisecond) {
+				return bootstrap
+			}
+		}
+		return permanentDNS[0] // Return default value
+	}
+
+	// Выбираем апстрим по round-robin
+	selectedUpstream := availableUpstreams[lastSelectedUpstreamIndex]
+	lastSelectedUpstreamIndex = (lastSelectedUpstreamIndex + 1) % len(availableUpstreams)
+
+	return selectedUpstream
 }

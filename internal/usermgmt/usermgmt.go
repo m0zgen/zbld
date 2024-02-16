@@ -175,8 +175,8 @@ func FindConfigFilesWithAlias(rootDir, findUserAlias string) ([]string, error) {
 		}
 
 		if !info.IsDir() && strings.HasSuffix(info.Name(), "config.yml") {
-			content, err := os.ReadFile(path)
-			if err != nil {
+			content, errRF := os.ReadFile(path)
+			if errRF != nil {
 				return err
 			}
 
@@ -200,8 +200,9 @@ func FindConfigFilesWithAlias(rootDir, findUserAlias string) ([]string, error) {
 		}
 		os.Exit(0)
 	} else {
-		fmt.Println("Alias not found")
-		os.Exit(1)
+		// TODO: Check from external function need Result status and exit
+		fmt.Println("Result: Alias not found")
+		//os.Exit(1)
 	}
 
 	return configFiles, nil
@@ -416,8 +417,8 @@ func GenerateUserConfig(usernameWithAlias string, force bool) {
 		os.Exit(1)
 	} else {
 		// Find user alias in users directory
-		configFiles, err := FindConfigFilesWithAlias(usersDir, useralias)
-		if err != nil {
+		configFiles, errF := FindConfigFilesWithAlias(usersDir, useralias)
+		if errF != nil {
 			fmt.Println("Error:", err)
 			return
 		}
