@@ -4,7 +4,6 @@ import (
 	"github.com/miekg/dns"
 	"log"
 	"sync"
-	"sync/atomic"
 	"time"
 	configuration "zbld/internal/config"
 )
@@ -13,12 +12,12 @@ import (
 
 // CurrentIndex - Selected upstream server index
 var CurrentIndex = 0
+var lastSelectedUpstreamIndex int // Глобальная переменная для хранения индекса последнего выбранного апстрима
 
 var bootstrapServers []string
 var checkAvailableDomain string
 var permanentDNS []string
 var availableIntervalDuration time.Duration
-var lastSelectedUpstreamIndex int // Глобальная переменная для хранения индекса последнего выбранного апстрима
 
 // Upstream routines ------------------------------------------------------- //
 
@@ -41,14 +40,6 @@ func MakeUpstreamMap() *UpstreamStatus {
 	return &UpstreamStatus{
 		Server: make(map[string]UpstreamInfo),
 	}
-}
-
-// Объявляем атомическую переменную для карты апстримов
-var atomicUpstreamStatus atomic.Value
-
-func init() {
-	// Инициализируем пустую карту
-	atomicUpstreamStatus.Store(make(map[string]*UpstreamInfo))
 }
 
 // Config setter -------------------------------------------------------- //
@@ -139,8 +130,9 @@ func GetUpstreamServer(upstreams []string, balancingPolicy string, upstreamStatu
 		return getRobinUpstreamServer(upstreams)
 	case "strict":
 		return getNextUpstreamServer(upstreams)
-	case "available":
-		//log.Printf("Available strategy")
+	case "available-robin":
+		return getAvailableUpstream(upstreamStatus)
+	case "available-fastest":
 		return getFastestAvailableUpstream(upstreamStatus)
 	default:
 		// Default strategy is robin
@@ -246,6 +238,7 @@ func getFastestAvailableUpstream(upstreamStatus *UpstreamStatus) string {
 	return permanentDNS[0] // Return default value
 }
 
+// getAvailableUpstream - Get current available upstream with round-robin // Объявляем переменную вне функции
 func getAvailableUpstream(upstreamStatus *UpstreamStatus) string {
 	upstreamStatus.RLock()
 	defer upstreamStatus.RUnlock()
@@ -269,9 +262,14 @@ func getAvailableUpstream(upstreamStatus *UpstreamStatus) string {
 		return permanentDNS[0] // Return default value
 	}
 
+	// Инициализируем lastSelectedUpstreamIndex, если он еще не инициализирован
+	if lastSelectedUpstreamIndex < 0 {
+		lastSelectedUpstreamIndex = -1 // Установим -1 для выбора первого апстрима в списке
+	}
+
 	// Выбираем апстрим по round-robin
-	selectedUpstream := availableUpstreams[lastSelectedUpstreamIndex]
 	lastSelectedUpstreamIndex = (lastSelectedUpstreamIndex + 1) % len(availableUpstreams)
+	selectedUpstream := availableUpstreams[lastSelectedUpstreamIndex]
 
 	return selectedUpstream
 }

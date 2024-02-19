@@ -5,9 +5,8 @@ upstream_dns_servers:
 permanent_dns_servers:
   - "95.85.95.85:53"
   - "2.56.220.2:53"
+# Load balancing strategies robin, strict, available-robin, available-fastest. Default is robin
 load_balancing_strategy: "robin"
-# If first available upstream server strategy enabled set to true if another strategy selected set to false
-first_available_enabled: false
 # Check first available upstream server every N seconds
 first_available_duration: 5s
 # Bootstrap / Fallback DNS server

@@ -24,7 +24,6 @@ type Config struct {
 	LogFile                string   `yaml:"log_file"`
 	LogStoreDuration       string   `yaml:"log_store_duration"`
 	BalancingStrategy      string   `yaml:"load_balancing_strategy"`
-	FirstAvailableEnabled  bool     `yaml:"first_available_enabled"`
 	FirtsAvailableInterval string   `yaml:"first_available_duration"`
 	Inverse                bool     `yaml:"inverse"`
 	CacheTTLSeconds        int      `yaml:"cache_ttl_seconds"`

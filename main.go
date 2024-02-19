@@ -575,12 +575,6 @@ func main() {
 	lockGlobalMaps()
 	initMetrics()
 	initLogging()
-	// Available strategy maker
-	upstreams.SetDefaultUpstreamInfo(upstreamStatus, config.UpstreamDNSServers)
-	upstreams.SetDefaultUpstreamInfo(upstreamStatus, config.DNSforWhitelisted)
-	if config.FirstAvailableEnabled {
-		go upstreams.MonitorUpstreams(upstreamStatus)
-	}
 
 	// Enable logging to file and stdout
 	if config.EnableLogging {
@@ -619,6 +613,14 @@ func main() {
 	// Loaders  --------------------------------------------------------------- //
 	lists.LoadHostsWithInterval(config.HostsFile, ReloadInterval, hostsRegexMap, hosts)
 	lists.LoadPermanentHostsWithInterval(config.PermanentWhitelisted, ReloadInterval, permanentRegexMap, permanentHosts)
+
+	// Activate upstreams ------------------------------------------------------ //
+	// Available strategy maker
+	upstreams.SetDefaultUpstreamInfo(upstreamStatus, config.UpstreamDNSServers)
+	upstreams.SetDefaultUpstreamInfo(upstreamStatus, config.DNSforWhitelisted)
+	if config.BalancingStrategy == "available-robin" || config.BalancingStrategy == "available-fastest" {
+		go upstreams.MonitorUpstreams(upstreamStatus)
+	}
 
 	// Run DNS server ----------------------------------------------------------- //
 

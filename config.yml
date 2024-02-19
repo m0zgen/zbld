@@ -1,8 +1,8 @@
 # Upstreams settings
-# Load balancing strategies robin, strict, available. Default is robin
-# Note: "available" - use only first available upstream server from upstream_dns_servers and permanent_dns_servers lists
-# Enable available strategy - first_available_enabled - set to true, load_balancing_strategy - set to "available"
-# If enabled another strategy, then first_available_enabled - set to false for reduce DNS requests for upstream servers
+# Load balancing strategies robin, strict, available-robin, available-fastest. Default is robin
+# Note: "available*" - Option enable periodical check for available upstream servers with mark upstreams as available or not (up/down)
+# Note: "available-fastest" - use only first fastest available upstream server from upstream_dns_servers and permanent_dns_servers lists
+# Note: "available-robin" - use round-robin for available upstream server from upstream_dns_servers and permanent_dns_servers lists
 load_balancing_strategy: "robin"
 # Default upstreams for not permanent domains
 upstream_dns_servers:
@@ -20,10 +20,7 @@ bootstrap_dns_servers:
   - "2.56.220.2:53"
 # Domain for upstream availability checking (dot at the end is required)
 check_available_domain: "openbld.net."
-
-# If first available upstream server strategy enabled set to true if another strategy selected set to false
-first_available_enabled: false
-# Check first available upstream server every N seconds
+# Check first available upstream server every N seconds(
 first_available_duration: 3s
 
 # Allowed query types
