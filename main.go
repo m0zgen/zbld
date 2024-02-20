@@ -222,6 +222,8 @@ func getQTypeResponse(m *dns.Msg, question dns.Question, host string, clientTCP 
 			log.Println("Creating answer for allowed Qtype:", question.Qtype)
 		}
 
+		defer prom.IncrementCountUpstreamServerAddress(upstreamAd)
+
 		rAnswer, isAnswerExist, _ := queries.GetQTypeAnswer(host, question, upstreamAd, clientTCP)
 		if rAnswer != nil {
 			if config.IsDebug {
@@ -387,6 +389,7 @@ func initMetrics() {
 		prometheus.MustRegister(prom.DnsQueriesTotal)
 		prometheus.MustRegister(prom.RequestsQTypeTotal)
 		prometheus.MustRegister(prom.RequestedDomainNameCounter)
+		prometheus.MustRegister(prom.CountUpstreamServerAddress)
 		prometheus.MustRegister(prom.BlockedDomainNameCounter)
 		prometheus.MustRegister(prom.NXDomainNameCounter)
 		prometheus.MustRegister(prom.SuccessfulResolutionsTotal)

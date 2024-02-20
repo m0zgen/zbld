@@ -272,4 +272,5 @@ func GetQTypeAnswer(hostName string, question dns.Question, upstreamAddr string,
 	}
 
 	//return nil, false, nil
+
 }

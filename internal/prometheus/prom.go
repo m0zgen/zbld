@@ -32,6 +32,14 @@ var (
 		},
 		[]string{"domain"},
 	)
+	// CountUpstreamServerAddress Initialized Prometheus metrics for upstream server address
+	CountUpstreamServerAddress = prometheus.NewCounterVec(
+		prometheus.CounterOpts{
+			Name: "zbld_upstream_server_address_total",
+			Help: "Total number of DNS requests by upstream server address",
+		},
+		[]string{"address"},
+	)
 	// BlockedDomainNameCounter Initialized Prometheus metrics for blocked domains (zero responses)
 	BlockedDomainNameCounter = prometheus.NewCounterVec(
 		prometheus.CounterOpts{
@@ -94,6 +102,12 @@ func IncrementRequestsQTypeTotal(qtype string) {
 func IncrementRequestedDomainNameCounter(domain string) {
 	RequestedDomainNameCounter.WithLabelValues(domain).Inc()
 	CounterChannel <- domain
+}
+
+// IncrementCountUpstreamServerAddress - Increment CountUpstreamServerAddress metric
+func IncrementCountUpstreamServerAddress(address string) {
+	CountUpstreamServerAddress.WithLabelValues(address).Inc()
+	CounterChannel <- address
 }
 
 // IncrementBlockedDomainNameCounter - Increment BlockedDomainNameCounter metric

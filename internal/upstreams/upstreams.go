@@ -145,8 +145,6 @@ func GetUpstreamServer(upstreams []string, balancingPolicy string, upstreamStatu
 // Upstream Routines ------------------------------------------------------- //
 
 // MonitorUpstreams - Periodically check the availability of all upstreams
-// MonitorUpstreams - функция для мониторинга состояния апстримов
-// MonitorUpstreams - функция для мониторинга состояния апстримов
 func MonitorUpstreams(upstreamStatus *UpstreamStatus) {
 	previousState := make(map[string]bool)
 
