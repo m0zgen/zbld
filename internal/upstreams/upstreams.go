@@ -19,6 +19,17 @@ var checkAvailableDomain string
 var permanentDNS []string
 var availableIntervalDuration time.Duration
 
+// SetConfig - Accept config.Config from external package
+func SetConfig(cfg *configuration.Config) {
+	// Set local variables through cgf.Config
+	bootstrapServers = cfg.BootstrapDNSServers
+	checkAvailableDomain = cfg.CheckAvailableDomain
+	permanentDNS = cfg.DNSforWhitelisted
+	availableIntervalDuration, _ = time.ParseDuration(cfg.FirtsAvailableInterval)
+
+	// ...
+}
+
 // Upstream routines ------------------------------------------------------- //
 
 // UpstreamInfo - Upstream server information
@@ -40,20 +51,6 @@ func MakeUpstreamMap() *UpstreamStatus {
 	return &UpstreamStatus{
 		Server: make(map[string]UpstreamInfo),
 	}
-}
-
-// Config setter -------------------------------------------------------- //
-
-// SetConfig - Accept config.Config from external package
-// and set configuration parameters to local variables
-func SetConfig(cfg *configuration.Config) {
-	// Set local variables through cgf.Config
-	bootstrapServers = cfg.BootstrapDNSServers
-	checkAvailableDomain = cfg.CheckAvailableDomain
-	permanentDNS = cfg.DNSforWhitelisted
-	availableIntervalDuration, _ = time.ParseDuration(cfg.FirtsAvailableInterval)
-
-	// ...
 }
 
 // Functions for internal use ---------------------------------------------- //

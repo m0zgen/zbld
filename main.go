@@ -386,6 +386,7 @@ func initLogging() {
 // InitMetrics - Init Prometheus metrics
 func initMetrics() {
 	if config.MetricsEnabled {
+		prom.SetConfig(&config)
 		prometheus.MustRegister(prom.DnsQueriesTotal)
 		prometheus.MustRegister(prom.RequestsQTypeTotal)
 		prometheus.MustRegister(prom.RequestedDomainNameCounter)

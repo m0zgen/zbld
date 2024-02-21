@@ -198,7 +198,7 @@ func FindConfigFilesWithAlias(rootDir, findUserAlias string) ([]string, error) {
 		for _, userConfig := range configFiles {
 			fmt.Println(userConfig)
 		}
-		os.Exit(0)
+		//os.Exit(0)
 	} else {
 		// TODO: Check from external function need Result status and exit
 		fmt.Println("Result: Alias not found")

@@ -2,10 +2,19 @@ package prom
 
 import (
 	"github.com/prometheus/client_golang/prometheus"
+	configuration "zbld/internal/config"
 )
 
 // CounterChannel - Channel for Prometheus counters
 var CounterChannel chan string
+var metricEnabled bool
+
+// SetConfig - Accept config.Config from external package
+func SetConfig(cfg *configuration.Config) {
+	// Set local variables through cgf.Config
+	metricEnabled = cfg.MetricsEnabled
+	// ...
+}
 
 // Prometheus scoping metrics
 var (
@@ -88,60 +97,80 @@ var (
 
 // IncrementDnsQueriesTotal - Increment DnsQueriesTotal metric
 func IncrementDnsQueriesTotal() {
-	DnsQueriesTotal.Inc()
-	CounterChannel <- "DnsQueriesTotal"
+	if metricEnabled {
+		DnsQueriesTotal.Inc()
+		CounterChannel <- "DnsQueriesTotal"
+	}
 }
 
 // IncrementRequestsQTypeTotal - Increment RequestsQTypeTotal metric
 func IncrementRequestsQTypeTotal(qtype string) {
-	RequestsQTypeTotal.WithLabelValues(qtype).Inc()
-	CounterChannel <- qtype
+	if metricEnabled {
+		RequestsQTypeTotal.WithLabelValues(qtype).Inc()
+		CounterChannel <- qtype
+	}
 }
 
 // IncrementRequestedDomainNameCounter - Increment RequestedDomainNameCounter metric
 func IncrementRequestedDomainNameCounter(domain string) {
-	RequestedDomainNameCounter.WithLabelValues(domain).Inc()
-	CounterChannel <- domain
+	if metricEnabled {
+		RequestedDomainNameCounter.WithLabelValues(domain).Inc()
+		CounterChannel <- domain
+	}
 }
 
 // IncrementCountUpstreamServerAddress - Increment CountUpstreamServerAddress metric
 func IncrementCountUpstreamServerAddress(address string) {
-	CountUpstreamServerAddress.WithLabelValues(address).Inc()
-	CounterChannel <- address
+	if metricEnabled {
+		CountUpstreamServerAddress.WithLabelValues(address).Inc()
+		CounterChannel <- address
+	}
 }
 
 // IncrementBlockedDomainNameCounter - Increment BlockedDomainNameCounter metric
 func IncrementBlockedDomainNameCounter(domain string) {
-	BlockedDomainNameCounter.WithLabelValues(domain).Inc()
-	CounterChannel <- domain
+	if metricEnabled {
+		BlockedDomainNameCounter.WithLabelValues(domain).Inc()
+		CounterChannel <- domain
+	}
 }
 
 // IncrementNXDomainNameCounter - Increment NXDomainNameCounter metric
 func IncrementNXDomainNameCounter(domain string) {
-	NXDomainNameCounter.WithLabelValues(domain).Inc()
-	CounterChannel <- domain
+	if metricEnabled {
+		NXDomainNameCounter.WithLabelValues(domain).Inc()
+		CounterChannel <- domain
+	}
 }
 
 // IncrementSuccessfulResolutionsTotal - Increment SuccessfulResolutionsTotal metric
 func IncrementSuccessfulResolutionsTotal() {
-	SuccessfulResolutionsTotal.Inc()
-	CounterChannel <- "SuccessfulResolutionsTotal"
+	if metricEnabled {
+		SuccessfulResolutionsTotal.Inc()
+		CounterChannel <- "SuccessfulResolutionsTotal"
+	}
 }
 
 // IncrementCacheTotal - Increment CacheHitResponseTotal metric
 func IncrementCacheTotal() {
-	CacheHitResponseTotal.Inc()
-	CounterChannel <- "CacheHitResponseTotal"
+	if metricEnabled {
+		CacheHitResponseTotal.Inc()
+		CounterChannel <- "CacheHitResponseTotal"
+	}
 }
 
 // IncrementZeroResolutionsTotal - Increment ZeroResolutionsTotal metric
 func IncrementZeroResolutionsTotal() {
-	ZeroResolutionsTotal.Inc()
-	CounterChannel <- "ZeroResolutionsTotal"
+	if metricEnabled {
+		ZeroResolutionsTotal.Inc()
+		CounterChannel <- "ZeroResolutionsTotal"
+	}
 }
 
 // IncrementReloadHostsTotal - Increment ReloadHostsTotal metric
 func IncrementReloadHostsTotal() {
-	ReloadHostsTotal.Inc()
-	CounterChannel <- "ReloadHostsTotal"
+	if metricEnabled {
+		ReloadHostsTotal.Inc()
+		CounterChannel <- "ReloadHostsTotal"
+	}
 }
