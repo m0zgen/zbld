@@ -6,7 +6,6 @@ import (
 	"gopkg.in/yaml.v2"
 	"log"
 	"os"
-	"path/filepath"
 	"regexp"
 	"sort"
 	"strconv"
@@ -165,49 +164,6 @@ func getNextUserName(basePath, baseName string) (string, error) {
 	return baseName + strconv.Itoa(len(numbers)+1), nil
 }
 
-// FindConfigFilesWithAlias - Find config files with alias
-func FindConfigFilesWithAlias(rootDir, findUserAlias string) ([]string, error) {
-	var configFiles []string
-
-	err := filepath.Walk(rootDir, func(path string, info os.FileInfo, err error) error {
-		if err != nil {
-			return err
-		}
-
-		if !info.IsDir() && strings.HasSuffix(info.Name(), "config.yml") {
-			content, errRF := os.ReadFile(path)
-			if errRF != nil {
-				return err
-			}
-
-			if strings.Contains(string(content), findUserAlias) {
-				configFiles = append(configFiles, path)
-			}
-		}
-
-		return nil
-	})
-
-	if err != nil {
-		log.Println("Error walking through directory:", err)
-		return nil, err
-	}
-
-	// If alias found - Exit
-	if len(configFiles) > 0 {
-		for _, userConfig := range configFiles {
-			fmt.Println(userConfig)
-		}
-		//os.Exit(0)
-	} else {
-		// TODO: Check from external function need Result status and exit
-		fmt.Println("Result: Alias not found")
-		//os.Exit(1)
-	}
-
-	return configFiles, nil
-}
-
 // extractAlias - Extract alias from username
 func extractAlias(username string, extractAlias bool) string {
 
@@ -349,59 +305,6 @@ func structUsrConfig(username, useralias string, dnsPort, metricsPort, updateUse
 
 // Externals  --------------------------------------------- //
 
-// DeleteTargetUser - Delete target user directory
-func DeleteTargetUser(username string, force bool) {
-
-	dirPath := usersDir + "/" + username
-
-	if fs.IsDirExists(dirPath) {
-
-		if !force {
-			// Ask user for deletion
-			if !askForDeletion() {
-				log.Println("User not deleted. Exit. Bye")
-				os.Exit(1)
-			}
-		}
-
-		err := os.RemoveAll(dirPath)
-		if err != nil {
-			log.Println("Error deleting directory:", err)
-			return
-		}
-		fmt.Println("Directory deleted:", dirPath)
-		os.Exit(0)
-	} else {
-		log.Println("User not found:", dirPath)
-		os.Exit(1)
-	}
-}
-
-// ListUsers - List users from users directory
-func ListUsers(dir string, summary bool) {
-	files, err := os.ReadDir(dir)
-	if err != nil {
-		fmt.Println("Error read catalog:", err)
-		return
-	}
-
-	for _, file := range files {
-		if file.IsDir() && strings.HasPrefix(file.Name(), "user") {
-			userName, userAlias, userDNSPort, userComment, err := readConfig(filepath.Join(dir, file.Name(), "config.yml"))
-			if err != nil {
-				fmt.Printf("Ошибка чтения файла конфигурации для пользователя %s: %v\n", file.Name(), err)
-				continue
-			}
-			if summary {
-				fmt.Printf("%s-%s,%s\n", userName, userAlias, userDNSPort)
-			} else {
-				fmt.Printf("UserName: %s, Alias: %s, Port: %s, Comment: %s\n", userName, userAlias, userDNSPort, userComment)
-			}
-		}
-	}
-	os.Exit(0)
-}
-
 // GenerateUserConfig - Generate user config external function
 func GenerateUserConfig(usernameWithAlias string, force bool) {
 	var err error
@@ -417,11 +320,12 @@ func GenerateUserConfig(usernameWithAlias string, force bool) {
 		os.Exit(1)
 	} else {
 		// Find user alias in users directory
-		configFiles, errF := FindConfigFilesWithAlias(usersDir, useralias)
-		if errF != nil {
-			fmt.Println("Error:", err)
-			return
-		}
+		//configFiles, errF := FindConfigFilesWithAlias(usersDir, useralias)
+		configFiles := searchConfigFile(usersDir, useralias)
+		//if errF != nil {
+		//	fmt.Println("Error:", err)
+		//	return
+		//}
 
 		if !force {
 			// If alis found - Exit
@@ -528,5 +432,6 @@ func GenerateUserConfig(usernameWithAlias string, force bool) {
 	fmt.Println("Alias:", useralias)
 	fmt.Println("Port:", strconv.Itoa(updatedDNSPort))
 	fmt.Printf("Summary: %s-%s,%s\n", username, useralias, strconv.Itoa(updatedDNSPort))
+
 	os.Exit(0)
 }
