@@ -64,12 +64,8 @@ func FindConfigFilesWithAlias(rootDir, findUserAlias string) ([]string, error) {
 		}
 
 		if !info.IsDir() && strings.HasSuffix(info.Name(), "config.yml") {
-			content, errRF := os.ReadFile(path)
-			if errRF != nil {
-				return err
-			}
 
-			if strings.Contains(string(content), findUserAlias) {
+			if isAliasMatch(path, findUserAlias) {
 				configFiles = append(configFiles, path)
 			}
 		}
@@ -87,11 +83,11 @@ func FindConfigFilesWithAlias(rootDir, findUserAlias string) ([]string, error) {
 		for _, userConfig := range configFiles {
 			fmt.Println(userConfig)
 		}
-		//os.Exit(0)
+		os.Exit(0)
 	} else {
 		// TODO: Check from external function need Result status and exit
 		fmt.Println("Result: Alias not found")
-		//os.Exit(1)
+		os.Exit(1)
 	}
 
 	return configFiles, nil
