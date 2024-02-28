@@ -546,6 +546,15 @@ func main() {
 		users.ListUsers(config.UsersDir, *summaryFlag)
 	}
 
+	if *searchUserAliasFlag != "" {
+		users.SetConfig(&config)
+		_, errSearchAlias := users.FindConfigFilesWithAlias(config.UsersDir, *searchUserAliasFlag)
+		if errSearchAlias != nil {
+			log.Fatal("Error searching user alias:", errSearchAlias)
+		}
+		os.Exit(0)
+	}
+
 	if *clearLogsFlag {
 		maxAgeDuration, err := time.ParseDuration(config.LogStoreDuration)
 		if err != nil {
@@ -565,14 +574,6 @@ func main() {
 	ReloadInterval, errReload := time.ParseDuration(config.ReloadInterval)
 	if errReload != nil {
 		log.Fatalf("Error parsing interval duration: %v", errReload)
-	}
-
-	if *searchUserAliasFlag != "" {
-		users.SetConfig(&config)
-		_, errSearchAlias := users.FindConfigFilesWithAlias(config.UsersDir, *searchUserAliasFlag)
-		if errSearchAlias != nil {
-			log.Fatal("Error searching user alias:", errSearchAlias)
-		}
 	}
 
 	// Inits & Setup Logging -------------------------------------- //

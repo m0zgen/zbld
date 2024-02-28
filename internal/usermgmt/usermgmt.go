@@ -321,7 +321,7 @@ func GenerateUserConfig(usernameWithAlias string, force bool) {
 	} else {
 		// Find user alias in users directory
 		//configFiles, errF := FindConfigFilesWithAlias(usersDir, useralias)
-		configFiles := searchConfigFile(usersDir, useralias)
+		configFiles := SearchConfigFile(usersDir, useralias)
 		//if errF != nil {
 		//	fmt.Println("Error:", err)
 		//	return
@@ -330,11 +330,11 @@ func GenerateUserConfig(usernameWithAlias string, force bool) {
 		if !force {
 			// If alis found - Exit
 			if len(configFiles) > 0 {
-				log.Println("Alias found:")
+				log.Println("User alias already exists:", useralias)
 				for _, configFile := range configFiles {
 					fmt.Println("Config:", configFile)
 				}
-				log.Println("User alias already exists. Exiting...")
+				fmt.Println("Existing user:", useralias)
 				os.Exit(1)
 			}
 		}

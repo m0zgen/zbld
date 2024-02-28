@@ -30,7 +30,7 @@ func isAliasMatch(filePath string, findUserAlias string) bool {
 
 }
 
-func searchConfigFile(dir string, findUserAlias string) []string {
+func SearchConfigFile(dir string, findUserAlias string) []string {
 	var configFiles []string
 
 	files, err := os.ReadDir(dir)
@@ -41,12 +41,12 @@ func searchConfigFile(dir string, findUserAlias string) []string {
 	for _, file := range files {
 		if file.IsDir() {
 			// Объединяем результаты рекурсивного вызова с текущими configFiles
-			configFiles = append(configFiles, searchConfigFile(filepath.Join(dir, file.Name()), findUserAlias)...)
+			configFiles = append(configFiles, SearchConfigFile(filepath.Join(dir, file.Name()), findUserAlias)...)
 			continue // Continue search in subdirectories
 		}
 		if file.Name() == "config.yml" {
 			if isAliasMatch(filepath.Join(dir, file.Name()), findUserAlias) {
-				fmt.Println("File", filepath.Join(dir, file.Name()), "contains user alias.")
+				//fmt.Println("File:", filepath.Join(dir, file.Name()), "contains user alias.")
 				configFiles = append(configFiles, filepath.Join(dir, file.Name()))
 			}
 		}
