@@ -162,3 +162,22 @@ for user2:
 ```shell
 ./zbld -config=users/user2/config.yml -hosts=users/user2/hosts.txt -permanent=users/user2/hosts-permanent.txt
 ```
+
+## Users Manager
+
+Allow add, remove, search users.
+
+Add user:
+```shell
+./zbld -adduser=user_<user_id>
+```
+
+Search user:
+```shell
+./zbld -searchuser=<user_id>
+```
+
+Remove user:
+```shell
+./zbld -deluser=<user_id>
+```
